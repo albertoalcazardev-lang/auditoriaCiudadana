@@ -1,0 +1,47 @@
+# ==============================================================================
+# VyT Systems - .gitignore
+# ==============================================================================
+
+# --- .NET / Artefactos de compilación ---
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+[Tt]est[Rr]esult*/
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+artifacts/
+publish/
+
+# --- Secretos y configuraciones locales (NUNCA subir credenciales a GitHub) ---
+appsettings.Local.json
+appsettings.*.Local.json
+.env
+.env.local
+.env.*.local
+
+# --- Bases de datos locales eventuales ---
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sql.bak
+
+# --- Frontend / Node.js / Vite ---
+node_modules/
+frontend/dist/
+frontend/dist-ssr/
+*.tsbuildinfo
+npm-debug.log*
+
+# --- Editores / Sistema Operativo ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*~
