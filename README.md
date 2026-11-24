@@ -37,10 +37,16 @@ VyTSystems/
 │   │   ├── Common/
 │   │   │   ├── CQRS/                   # ICommand, IQuery, Handlers, IDispatcher, RequestDispatcher
 │   │   │   ├── Validation/             # ValidationError y extensiones para FluentValidation
-│   │   │   ├── Mapping/                # MappingConfig (escaneo de perfiles IRegister de Mapster)
+│   │   │   ├── Mapping/                # MappingConfig (convenciones comunes y escaneo IRegister)
 │   │   │   └── Results/                # Result, Result<T> y Error
-│   │   ├── Solicitudes/                # Vertical Slices: Crear/, Editar/, Consultar/, Listar/
-│   │   ├── Instituciones/              # Casos de uso de Instituciones
+│   │   ├── Solicitudes/
+│   │   │   ├── Crear/
+│   │   │   ├── Editar/
+│   │   │   ├── Consultar/
+│   │   │   ├── Listar/
+│   │   │   └── Mapping/                # Perfiles IRegister específicos de Solicitudes
+│   │   ├── Instituciones/
+│   │   │   └── Mapping/                # Perfiles IRegister específicos de Instituciones
 │   │   ├── Auth/                       # Casos de uso futuros de Autenticación
 │   │   ├── Dashboard/                  # Casos de uso futuros de Tablero
 │   │   ├── DependencyInjection.cs
@@ -224,24 +230,115 @@ public sealed class SolicitudesController(ICommandDispatcher commandDispatcher) 
 
 ---
 
-## 7. Entidades, DTOs y Configuración de Mapster
+## Mapster — Configuración y convenciones de mapeo
 
-1. **Entidades:** se crean en `VyTSystems.Domain/Entities/` heredando de `Entity<TId>` y encapsulando sus reglas de negocio.
-2. **DTOs:** se definen como `record` inmutables junto al caso de uso que los necesita (p. ej. `Application/Solicitudes/Consultar/SolicitudDetalleDto.cs`).
-3. **Mapster (`Application/Common/Mapping/`):** `MappingConfig` escanea automáticamente todas las clases que implementen `IRegister` en `Application` e inyecta `IMapper`:
-   ```csharp
-   using Mapster;
+> **Nota importante:** los fragmentos de código de esta sección (`Solicitud`, `SolicitudDto`, `SolicitudMappingConfig`) son **ejemplos exclusivamente educativos dentro del `README.md`** y no existen como clases reales dentro de `Application` ni `Domain` durante Task 00.
 
-   public sealed class SolicitudMappingConfig : IRegister
-   {
-       public void Register(TypeAdapterConfig config)
-       {
-           config.NewConfig<Solicitud, SolicitudDetalleDto>()
-               .Map(dest => dest.SolicitudId, src => src.Id);
-       }
-   }
-   ```
-   * **Regla:** no mapear propiedades sensibles automáticamente ni usar Mapster para sustituir constructores/fábricas del Dominio, validaciones o repositorios.
+### 7.1. ¿Qué es Mapster y para qué lo utilizamos?
+* **¿Qué es Mapster?** Es una biblioteca ligera y de alto rendimiento para C# que automatiza y estandariza la transformación de datos entre objetos en memoria.
+* **¿Para qué lo utilizamos en VyT Systems?** Para convertir **Entidades a DTOs**, **modelos de consulta a DTOs** y **objetos de respuesta de `Application`**, reduciendo conversiones repetitivas cuando la transformación es directa y segura.
+
+### 7.2. Diferencia entre Entity Framework Core y Mapster
+* **Entity Framework Core (`Infrastructure`):** es el **ORM** responsable de la persistencia en **MySQL**, traducción de LINQ a SQL, transacciones, repositorios y migraciones.
+* **Mapster (`Application`):** únicamente **convierte objetos C# en otros objetos C#** ya cargados o proyectados en memoria, sin acceder a bases de datos, sin validar reglas de negocio y sin sustituir a FluentValidation ni a EF Core.
+
+### 7.3. ¿Qué es una Entidad y qué es un DTO?
+* **Entidad (`VyTSystems.Domain/Entities/`):** modelo central del negocio con identidad única (`Id`), estado protegido (`private set`) y métodos que hacen cumplir las reglas del negocio. Nunca se devuelve directamente en respuestas HTTP.
+* **DTO — *Data Transfer Object* (`VyTSystems.Application/<Modulo>/<Accion>/`):** objeto inmutable (`record`) sin comportamiento de negocio que transporta únicamente los campos necesarios para responder un caso de uso específico (p. ej. `Solicitudes/Listar/SolicitudResumenDto.cs`).
+
+### 7.4. Cómo se transforma una Entidad en un DTO (Mapeo manual vs. Mapster)
+
+Supongamos el siguiente modelo educativo:
+
+```csharp
+// Entidad de dominio (ejemplo educativo)
+public sealed class Solicitud : Entity<Guid>
+{
+    public string Folio { get; private set; } = string.Empty;
+    public string Descripcion { get; private set; } = string.Empty;
+    public EstadoSolicitud Estado { get; private set; }
+    public DateOnly FechaRegistro { get; private set; }
+    public string NotasInternasReservadas { get; private set; } = string.Empty;
+}
+
+// DTO de respuesta cercano al caso de uso (ejemplo educativo)
+public sealed record SolicitudDto(
+    Guid SolicitudId,
+    string Folio,
+    string Descripcion,
+    string EstadoTexto,
+    DateOnly FechaRegistro);
+```
+
+* **Con mapeo manual (repetido en cada lugar que lo necesite):**
+  ```csharp
+  var dto = new SolicitudDto(
+      SolicitudId: solicitud.Id,
+      Folio: solicitud.Folio,
+      Descripcion: solicitud.Descripcion,
+      EstadoTexto: solicitud.Estado.ToString(),
+      FechaRegistro: solicitud.FechaRegistro);
+  ```
+* **Con Mapster (regla centralizada una sola vez en el módulo):**
+  ```csharp
+  // En SolicitudMappingConfig (una sola vez por módulo):
+  config.NewConfig<Solicitud, SolicitudDto>()
+      .Map(dest => dest.SolicitudId, src => src.Id)
+      .Map(dest => dest.EstadoTexto, src => src.Estado.ToString());
+
+  // En cualquier Handler que lo requiera:
+  var dto = mapper.Map<SolicitudDto>(solicitud);
+  ```
+  *(Observa que `NotasInternasReservadas` no existe en `SolicitudDto`, evitando exponer datos internos).*
+
+### 7.5. Cómo funcionan `IMapper`, `TypeAdapterConfig` e `IRegister`
+* **`TypeAdapterConfig`:** contenedor central donde Mapster guarda las convenciones comunes y los perfiles compilados; se registra **una sola vez como `Singleton`**.
+* **`IRegister`:** interfaz de Mapster (`void Register(TypeAdapterConfig config)`) implementada por cada módulo para registrar sus reglas sin acoplarse a otros módulos.
+* **`MapsterMapper.IMapper` (`ServiceMapper`):** servicio oficial de `Mapster.DependencyInjection` registrado como **`Scoped`** para inyectarse en los Handlers (usa siempre `mapper.Map<TDto>(...)` en lugar de la extensión estática `.Adapt<TDto>()`, para garantizar que se utilice la instancia `TypeAdapterConfig` registrada en DI y no `GlobalSettings`). **No se debe crear una interfaz `IMapper` personalizada.**
+
+### 7.6. Organización de carpetas y registro en Dependency Injection
+1. **Configuraciones comunes (`Application/Common/Mapping/MappingConfig.cs`):** construye una instancia aislada de `TypeAdapterConfig` y ejecuta `config.Scan(applicationAssembly)` (reservado únicamente para convenciones transversales justificadas; nunca debe convertirse en una clase gigante con mapeos de negocio).
+2. **Configuraciones específicas de cada módulo (`Application/<Modulo>/Mapping/`):** cada módulo colocará ahí sus clases `IRegister` cuando existan entidades reales:
+   * `Application/Solicitudes/Mapping/SolicitudMappingConfig.cs`
+   * `Application/Instituciones/Mapping/InstitucionMappingConfig.cs`
+3. **DTOs:** permanecen junto al caso de uso que los utiliza (`Application/Solicitudes/Listar/SolicitudResumenDto.cs`).
+4. **Registro mediante Dependency Injection (`Application/DependencyInjection.cs`):** utiliza `TryAddSingleton` para `TypeAdapterConfig` y `TryAddScoped<IMapper, ServiceMapper>()`, garantizando una única instancia de configuración y cero registros duplicados. Al crear una clase `IRegister` dentro de `VyTSystems.Application`, `config.Scan(assembly)` la detecta automáticamente al iniciar.
+
+### 7.7. Cómo utilizar Mapster desde un Handler
+```csharp
+using MapsterMapper;
+
+public sealed class ConsultarSolicitudHandler(
+    ISolicitudRepository repository,
+    IMapper mapper) : IQueryHandler<ConsultarSolicitudQuery, SolicitudDto>
+{
+    public async Task<Result<SolicitudDto>> HandleAsync(
+        ConsultarSolicitudQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        var solicitud = await repository.GetByIdAsync(query.SolicitudId, cancellationToken);
+        if (solicitud is null)
+        {
+            return Result.Failure<SolicitudDto>(
+                Error.NotFound("Solicitud.NoEncontrada", "La solicitud solicitada no existe."));
+        }
+
+        var dto = mapper.Map<SolicitudDto>(solicitud);
+        return Result.Success(dto);
+    }
+}
+```
+
+### 7.8. Cuándo preferir conversión manual y cómo evitar copiar datos sensibles
+* **Cuándo usar conversión manual / métodos del dominio:** en toda **creación o modificación de entidades con reglas de negocio** (`Command` → `Entidad`). **Prohibido usar `mapper.Map<Solicitud>(command)` o `mapper.Map(command, solicitud)`** para modificar estados, permisos o identificadores saltándose constructores o métodos del dominio (`Solicitud.Crear(...)`, `solicitud.CambiarEstado(...)`).
+* **Evitar fugas o copias sensibles:** definir DTOs cerrados solo con campos públicos, nunca mapear entradas externas sobre propiedades sensibles (hashes, roles, `Id`, auditoría) y usar `.Ignore(...)` cuando sea necesario bloquear explícitamente un miembro.
+
+### 7.9. Cómo aplicar SOLID al mapeo
+* **Single Responsibility:** cada `MappingConfig` de módulo atiende únicamente las conversiones de su módulo.
+* **Open/Closed:** añadir `InstitucionMappingConfig : IRegister` no obliga a modificar `MappingConfig.cs` ni `SolicitudMappingConfig`.
+* **Liskov Substitution:** `ServiceMapper` cumple fielmente el contrato `MapsterMapper.IMapper`.
+* **Interface Segregation:** se inyecta `MapsterMapper.IMapper` sin fabricar interfaces globales gigantes con métodos por cada entidad.
+* **Dependency Inversion:** `Domain` permanece libre de Mapster e `Infrastructure` no se filtra hacia `Application`.
 
 ---
 
@@ -256,7 +353,7 @@ public sealed class SolicitudesController(ICommandDispatcher commandDispatcher) 
 **Nunca escribas contraseñas en `appsettings.json` ni las subas a GitHub.** Cada desarrollador configura su conexión local hacia `VyTSystems_Dev` usando **User Secrets** de .NET (con un usuario local dedicado distinto de `root`):
 
 ```bash
-cd "/home/beto/Proyectos CV/VyTSystems/backend"
+cd "/home/beto/Proyectos_CV/VyTSystems/backend"
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" \
   "Server=127.0.0.1;Port=3306;Database=VyTSystems_Dev;Uid=vyt_dev;Pwd=TU_PASSWORD_LOCAL;" \
   --project VyTSystems.API/VyTSystems.API.csproj
@@ -265,7 +362,7 @@ dotnet user-secrets set "ConnectionStrings:DefaultConnection" \
 
 ### Crear y aplicar migraciones reales (cuando exista el primer modelo aprobado)
 ```bash
-cd "/home/beto/Proyectos CV/VyTSystems/backend"
+cd "/home/beto/Proyectos_CV/VyTSystems/backend"
 
 dotnet ef migrations add <NombreMigracion> \
   --project VyTSystems.Infrastructure/VyTSystems.Infrastructure.csproj \
@@ -310,14 +407,14 @@ features/solicitudes/
 
 ### Backend (`http://localhost:5080`)
 ```bash
-cd "/home/beto/Proyectos CV/VyTSystems/backend"
+cd "/home/beto/Proyectos_CV/VyTSystems/backend"
 dotnet build VyTSystems.sln
 dotnet run --project VyTSystems.API
 ```
 
 ### Frontend (`http://localhost:5173`)
 ```bash
-cd "/home/beto/Proyectos CV/VyTSystems/frontend"
+cd "/home/beto/Proyectos_CV/VyTSystems/frontend"
 npm install
 npm run build
 npm run dev

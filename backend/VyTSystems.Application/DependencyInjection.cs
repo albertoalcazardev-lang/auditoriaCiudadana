@@ -2,6 +2,7 @@ using System.Reflection;
 using FluentValidation;
 using MapsterMapper;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using VyTSystems.Application.Common.CQRS;
 using VyTSystems.Application.Common.Mapping;
 
@@ -23,15 +24,14 @@ public static class DependencyInjection
     {
         var assembly = typeof(DependencyInjection).Assembly;
 
-        services.AddScoped<RequestDispatcher>();
-        services.AddScoped<ICommandDispatcher>(sp => sp.GetRequiredService<RequestDispatcher>());
-        services.AddScoped<IQueryDispatcher>(sp => sp.GetRequiredService<RequestDispatcher>());
+        services.TryAddScoped<RequestDispatcher>();
+        services.TryAddScoped<ICommandDispatcher>(sp => sp.GetRequiredService<RequestDispatcher>());
+        services.TryAddScoped<IQueryDispatcher>(sp => sp.GetRequiredService<RequestDispatcher>());
 
         services.AddValidatorsFromAssembly(assembly, ServiceLifetime.Scoped);
 
-        var mappingConfig = MappingConfig.CreateConfiguration(assembly);
-        services.AddSingleton(mappingConfig);
-        services.AddScoped<IMapper, ServiceMapper>();
+        services.TryAddSingleton(_ => MappingConfig.CreateConfiguration(assembly));
+        services.TryAddScoped<IMapper, ServiceMapper>();
 
         RegisterHandlersFromAssembly(services, assembly);
 
@@ -54,7 +54,7 @@ public static class DependencyInjection
 
             foreach (var serviceInterface in handlerInterfaces)
             {
-                services.AddScoped(serviceInterface, implementationType);
+                services.TryAddScoped(serviceInterface, implementationType);
             }
         }
     }
