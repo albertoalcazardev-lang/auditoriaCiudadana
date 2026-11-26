@@ -38,6 +38,7 @@ function NuevaSolicitudWorkspace({
       {vm.submitStatus === 'succeeded' && vm.confirmacion ? (
         <SolicitudConfirmacionView
           confirmacion={vm.confirmacion}
+          onEditarSolicitud={vm.irAEditarSolicitud}
           onRegistrarOtra={vm.resetFormulario}
           onVolverPanel={vm.confirmExitToDashboard}
         />

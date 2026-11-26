@@ -41,8 +41,44 @@ export interface CrearSolicitudResponse {
   estatus: string;
 }
 
-export type SolicitudFieldName =
-  | 'folio'
+export interface SolicitudEdicionResponse {
+  id: string;
+  folio: string;
+  fechaEntrega: string; // yyyy-MM-dd
+  horaEntrega: string; // HH:mm
+  areaReceptoraId: string;
+  asunto: string;
+  medioEntrega: string;
+  estatusEntrega: string;
+  tipoSolicitud: string;
+  tipoEvidencia: string;
+  tieneAcuse: boolean;
+  tipoAcuse: string;
+  fechaVencimiento: string; // yyyy-MM-dd
+  diasRestantes: number;
+  estatusEfectivo: string;
+}
+
+export interface SolicitudEdicionSnapshot {
+  solicitud: SolicitudEdicionResponse;
+  etag: string;
+}
+
+export interface ActualizarSolicitudPayload {
+  fechaEntrega: string; // yyyy-MM-dd
+  horaEntrega: string; // HH:mm
+  areaReceptoraId: string;
+  asunto: string;
+  medioEntrega: string;
+  estatusEntrega: string;
+  tipoSolicitud: string;
+  tipoEvidencia: string;
+  tieneAcuse: boolean;
+  tipoAcuse: string;
+  fechaVencimiento: string; // yyyy-MM-dd
+}
+
+export type SolicitudEditableFieldName =
   | 'fechaEntrega'
   | 'horaEntrega'
   | 'areaReceptoraId'
@@ -55,11 +91,12 @@ export type SolicitudFieldName =
   | 'tipoAcuse'
   | 'fechaVencimiento';
 
+export type SolicitudFieldName = 'folio' | SolicitudEditableFieldName;
+
+export type SolicitudEditableFieldErrors = Partial<Record<SolicitudEditableFieldName, string>>;
 export type SolicitudFieldErrors = Partial<Record<SolicitudFieldName, string>>;
 
-export interface SolicitudFormValues {
-  generarFolioAutomatico: boolean;
-  folio: string;
+export interface SolicitudEditableFormValues {
   fechaEntrega: string;
   horaEntrega: string;
   areaReceptoraId: string;
@@ -73,6 +110,11 @@ export interface SolicitudFormValues {
   fechaVencimiento: string;
 }
 
+export interface SolicitudFormValues extends SolicitudEditableFormValues {
+  generarFolioAutomatico: boolean;
+  folio: string;
+}
+
 export type DiasRestantesTone = 'normal' | 'warning' | 'urgent' | 'empty';
 
 export type SubmitStatus = 'idle' | 'confirming' | 'submitting' | 'uncertain' | 'succeeded';
@@ -82,6 +124,20 @@ export type SolicitudModalState =
   | 'confirm-register'
   | 'confirm-discard'
   | 'confirm-uncertain-exit';
+
+export type EditarSolicitudModalState =
+  | 'none'
+  | 'confirm-save'
+  | 'confirm-discard'
+  | 'confirm-uncertain-exit'
+  | 'conflict-concurrency'
+  | 'not-found';
+
+export interface SolicitudToastMessage {
+  id: number;
+  tone: 'info' | 'success';
+  text: string;
+}
 
 export interface SolicitudConfirmacionResumen {
   resultado: CrearSolicitudResponse;

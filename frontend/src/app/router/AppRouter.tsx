@@ -2,6 +2,7 @@ import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { SessionRoute } from '../../features/auth/pages/SessionRoute';
 import { RegisterPage } from '../../features/auth/pages/RegisterPage';
 import { NuevaSolicitudPage } from '../../features/solicitudes/pages/NuevaSolicitudPage';
+import { EditarSolicitudPage } from '../../features/solicitudes/pages/EditarSolicitudPage';
 
 function BaseWelcomeView() {
   return (
@@ -29,6 +30,7 @@ export function AppRouter() {
         <Route path="/consulta/login" element={<SessionRoute access="consulta" login />} />
         <Route path="/admin/dashboard" element={<SessionRoute access="admin" />} />
         <Route path="/admin/solicitudes/nueva" element={<NuevaSolicitudPage />} />
+        <Route path="/admin/solicitudes/:folio/editar" element={<EditarSolicitudPage />} />
         <Route path="/consulta/dashboard" element={<SessionRoute access="consulta" />} />
         <Route path="/registro" element={<RegisterPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

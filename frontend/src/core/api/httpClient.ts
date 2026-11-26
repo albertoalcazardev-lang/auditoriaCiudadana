@@ -31,10 +31,15 @@ function resolveApiUrl(path: string): string {
   return `${trimmedBase}${normalizedPath}`;
 }
 
-export async function httpRequest<TResponse, TBody = unknown>(
+export interface HttpResponseWithHeaders<TResponse> {
+  data: TResponse;
+  headers: Headers;
+}
+
+export async function httpRequestWithHeaders<TResponse, TBody = unknown>(
   path: string,
   options: HttpRequestOptions<TBody> = {},
-): Promise<TResponse> {
+): Promise<HttpResponseWithHeaders<TResponse>> {
   const { method = 'GET', body, headers = {}, signal } = options;
 
   const requestHeaders: Record<string, string> = {
@@ -68,8 +73,17 @@ export async function httpRequest<TResponse, TBody = unknown>(
   }
 
   if (response.status === 204 || !isJson) {
-    return undefined as TResponse;
+    return { data: undefined as TResponse, headers: response.headers };
   }
 
-  return (await response.json()) as TResponse;
+  const data = (await response.json()) as TResponse;
+  return { data, headers: response.headers };
+}
+
+export async function httpRequest<TResponse, TBody = unknown>(
+  path: string,
+  options: HttpRequestOptions<TBody> = {},
+): Promise<TResponse> {
+  const { data } = await httpRequestWithHeaders<TResponse, TBody>(path, options);
+  return data;
 }
