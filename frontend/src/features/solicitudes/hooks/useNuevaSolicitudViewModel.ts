@@ -199,6 +199,9 @@ export function useNuevaSolicitudViewModel(userId: string) {
 
   const pendingSubmissionRef = useRef<PendingSubmissionRecord | null>(initialBootstrap.restored);
   const allowExitRef = useRef(false);
+  const pendingExitDestinationRef = useRef<'/admin/dashboard' | '/admin/solicitudes'>(
+    '/admin/dashboard',
+  );
   const fieldRefs = useRef<Partial<Record<SolicitudFieldName, HTMLElement | null>>>({});
 
   useEffect(() => {
@@ -606,6 +609,7 @@ export function useNuevaSolicitudViewModel(userId: string) {
 
   const requestCancel = useCallback(() => {
     if (submitStatus === 'submitting') return;
+    pendingExitDestinationRef.current = '/admin/dashboard';
     if (submitStatus === 'uncertain') {
       setModalState('confirm-uncertain-exit');
       return;
@@ -615,6 +619,7 @@ export function useNuevaSolicitudViewModel(userId: string) {
 
   const requestExitToDashboard = useCallback(() => {
     if (submitStatus === 'submitting') return;
+    pendingExitDestinationRef.current = '/admin/dashboard';
     if (submitStatus === 'uncertain') {
       setModalState('confirm-uncertain-exit');
       return;
@@ -627,11 +632,38 @@ export function useNuevaSolicitudViewModel(userId: string) {
     navigate('/admin/dashboard');
   }, [isDirty, navigate, submitStatus]);
 
+  const requestExitToSolicitudes = useCallback(() => {
+    if (submitStatus === 'submitting') return;
+    if (submitStatus === 'uncertain') {
+      pendingExitDestinationRef.current = '/admin/solicitudes';
+      setModalState('confirm-uncertain-exit');
+      return;
+    }
+    if (isDirty && submitStatus !== 'succeeded') {
+      pendingExitDestinationRef.current = '/admin/solicitudes';
+      setModalState('confirm-discard');
+      return;
+    }
+    pendingExitDestinationRef.current = '/admin/dashboard';
+    allowExitRef.current = true;
+    navigate('/admin/solicitudes');
+  }, [isDirty, navigate, submitStatus]);
+
   const closeDiscardModal = useCallback(() => {
+    pendingExitDestinationRef.current = '/admin/dashboard';
     setModalState('none');
   }, []);
 
+  const confirmDiscardExit = useCallback(() => {
+    const destination = pendingExitDestinationRef.current;
+    pendingExitDestinationRef.current = '/admin/dashboard';
+    allowExitRef.current = true;
+    setModalState('none');
+    navigate(destination);
+  }, [navigate]);
+
   const confirmExitToDashboard = useCallback(() => {
+    pendingExitDestinationRef.current = '/admin/dashboard';
     allowExitRef.current = true;
     setModalState('none');
     navigate('/admin/dashboard');
@@ -689,7 +721,9 @@ export function useNuevaSolicitudViewModel(userId: string) {
     cancelConfirmRegister,
     requestCancel,
     requestExitToDashboard,
+    requestExitToSolicitudes,
     closeDiscardModal,
+    confirmDiscardExit,
     confirmExitToDashboard,
     irAEditarSolicitud,
     resetFormulario,

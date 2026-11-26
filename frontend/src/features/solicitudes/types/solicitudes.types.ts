@@ -151,3 +151,95 @@ export interface SolicitudConfirmacionResumen {
   tieneAcuseTexto: string;
   tipoAcuseNombre: string;
 }
+
+export type SolicitudSortField = 'vencimiento' | 'folio' | 'entrega' | 'dias';
+
+export type SolicitudSortDirection = 'asc' | 'desc';
+
+export type SolicitudPageSize = 10 | 25 | 50;
+
+export type SolicitudDiasFilter = 'todos' | '0' | '1-3' | '4-7' | '8+' | '1-7' | 'custom';
+
+export interface ListarSolicitudesParams {
+  q?: string;
+  ent_d?: string;
+  ent_h?: string;
+  ven_d?: string;
+  ven_h?: string;
+  dias?: Exclude<SolicitudDiasFilter, 'todos'>;
+  dias_min?: number;
+  dias_max?: number;
+  sort?: SolicitudSortField;
+  dir?: SolicitudSortDirection;
+  page?: number;
+  size?: SolicitudPageSize;
+}
+
+export interface SolicitudListadoItem {
+  id: string;
+  folio: string;
+  asunto: string;
+  areaReceptora: string;
+  medioEntrega: string;
+  estatusEfectivo: string;
+  fechaEntrega: string; // yyyy-MM-dd
+  fechaVencimiento: string; // yyyy-MM-dd
+  diasRestantes: number;
+  version: string; // token opaco de concurrencia
+}
+
+export interface ListadoSolicitudesResponse {
+  items: SolicitudListadoItem[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+export interface SolicitudesUrlQueryState {
+  q: string;
+  ent_d: string;
+  ent_h: string;
+  ven_d: string;
+  ven_h: string;
+  dias: SolicitudDiasFilter;
+  dias_min?: number;
+  dias_max?: number;
+  sort: SolicitudSortField;
+  dir: SolicitudSortDirection;
+  page: number;
+  size: SolicitudPageSize;
+}
+
+export interface SolicitudesFilterDraft {
+  entDesde: string;
+  entHasta: string;
+  venDesde: string;
+  venHasta: string;
+  dias: SolicitudDiasFilter;
+  diasMin: string;
+  diasMax: string;
+}
+
+export interface SolicitudesFilterErrors {
+  entDesde?: string;
+  entHasta?: string;
+  entRange?: string;
+  venDesde?: string;
+  venHasta?: string;
+  venRange?: string;
+  diasCustom?: string;
+}
+
+export type SolicitudFilterChipKey = 'entrega' | 'vencimiento' | 'dias';
+
+export interface SolicitudActiveChip {
+  key: SolicitudFilterChipKey;
+  label: string;
+}
+
+export interface DeleteFeedbackBanner {
+  tone: 'error' | 'warning' | 'info';
+  message: string;
+  canRefreshList: boolean;
+}
