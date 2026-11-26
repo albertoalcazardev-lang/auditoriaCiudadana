@@ -1,7 +1,10 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using VyTSystems.Application.Abstractions.Authentication;
 using VyTSystems.Application.Abstractions.Persistence;
+using VyTSystems.Infrastructure.Identity;
 using VyTSystems.Infrastructure.Persistence;
 using VyTSystems.Infrastructure.Repositories;
 using VyTSystems.Infrastructure.Seed;
@@ -31,6 +34,17 @@ public static class DependencyInjection
                 connectionString,
                 mysql => mysql.MigrationsAssembly(typeof(VyTSystemsDbContext).Assembly.FullName)));
 
+        services.AddIdentityCore<IdentityUser>(options =>
+            {
+                // Reserva @ para distinguir el correo del nombre de usuario.
+                options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._+";
+                options.User.RequireUniqueEmail = true;
+            })
+            .AddRoles<IdentityRole>()
+            .AddEntityFrameworkStores<VyTSystemsDbContext>()
+            .AddSignInManager();
+
+        services.AddScoped<IAuthenticationService, IdentityAuthenticationService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<DatabaseInitializer>();
 

@@ -1,10 +1,10 @@
-# VyT Systems — Guía de Arquitectura y Desarrollo (Task 00)
+# VyT Systems — Guía de Arquitectura y Desarrollo
 
 ## 1. Objetivo de VyT Systems
 
 **VyT Systems** es una plataforma web modular cuyo primer módulo funcional será **Auditoría Ciudadana** (registro, consulta y seguimiento de solicitudes de información pública, administración de instituciones, plazos normativos y tablero de control).
 
-Esta **Task 00** entrega exclusivamente el **esqueleto arquitectónico común** para que todos los integrantes del equipo desarrollen sus historias de usuario bajo una estructura unificada, mantenible y alineada con buenas prácticas empresariales.
+Task 01 conecta los formularios de React con ASP.NET Core Identity y MySQL mediante una sesión por cookie.
 
 ---
 
@@ -15,6 +15,7 @@ Esta **Task 00** entrega exclusivamente el **esqueleto arquitectónico común** 
 | **Backend** | C#, .NET 10 LTS, ASP.NET Core 10 (Controllers + ProblemDetails + OpenAPI) |
 | **ORM y Persistencia** | Entity Framework Core 10 + `MySql.EntityFrameworkCore` (Oracle) sobre **MySQL 8.4 LTS** (`VyTSystems_Dev`) |
 | **Validación y Mapeo** | **FluentValidation** (`12.2.0`) · **Mapster** + `Mapster.DependencyInjection` (`10.0.14`) |
+| **Ejecución de CQRS** | MediatR `15.0.0` |
 | **Frontend** | React 19, TypeScript, Vite, React Router, Tailwind CSS 4, TanStack Query |
 | **Arquitectura** | Clean Architecture, Vertical Slice Architecture, CQRS, MVVM con hooks personalizados y SOLID |
 
@@ -34,8 +35,9 @@ VyTSystems/
 │   │
 │   ├── VyTSystems.Application/
 │   │   ├── Abstractions/Persistence/   # IUnitOfWork y contratos de repositorios futuros
+│   │   ├── Abstractions/Authentication/ # Verificación de credenciales y acceso solicitado
 │   │   ├── Common/
-│   │   │   ├── CQRS/                   # ICommand, IQuery, Handlers, IDispatcher, RequestDispatcher
+│   │   │   ├── Behaviors/              # ValidationBehavior de MediatR
 │   │   │   ├── Validation/             # ValidationError y extensiones para FluentValidation
 │   │   │   ├── Mapping/                # MappingConfig (convenciones comunes y escaneo IRegister)
 │   │   │   └── Results/                # Result, Result<T> y Error
@@ -47,7 +49,7 @@ VyTSystems/
 │   │   │   └── Mapping/                # Perfiles IRegister específicos de Solicitudes
 │   │   ├── Instituciones/
 │   │   │   └── Mapping/                # Perfiles IRegister específicos de Instituciones
-│   │   ├── Auth/                       # Casos de uso futuros de Autenticación
+│   │   ├── Auth/Login/                 # Command, Validator, Handler y resultado del login
 │   │   ├── Dashboard/                  # Casos de uso futuros de Tablero
 │   │   ├── DependencyInjection.cs
 │   │   └── VyTSystems.Application.csproj
@@ -135,98 +137,47 @@ VyTSystems.Application/
 
 ---
 
-## 6. Desarrollo con CQRS, FluentValidation y Dispatcher
+## 6. CQRS con MediatR y FluentValidation
 
-### 6.1. Cómo desarrollar Commands y Queries
-* **Command (`ICommand` o `ICommand<TResult>`):** operación que modifica el estado del sistema.
-  ```csharp
-  public sealed record CrearSolicitudCommand(
-      string Folio,
-      Guid InstitucionId,
-      string Descripcion) : ICommand<Guid>;
-  ```
-* **Query (`IQuery<TResult>`):** operación de solo lectura sin efectos secundarios.
-  ```csharp
-  public sealed record ConsultarSolicitudQuery(Guid SolicitudId) : IQuery<SolicitudDetalleDto>;
-  ```
+CQRS sigue separando operaciones de escritura y lectura. Desde Task 01, **MediatR sustituye al dispatcher propio**: los Commands y Queries implementan `IRequest<TResponse>` y cada Handler implementa `IRequestHandler<TRequest, TResponse>`. Las clases específicas viven juntas por funcionalidad; no hay carpeta general de CQRS.
 
-### 6.2. Cómo agregar Validators mediante FluentValidation
-Cada caso de uso define su validador heredando de `AbstractValidator<T>` en la misma carpeta del Slice. `AddApplication()` registra automáticamente todos los validadores del ensamblado:
+Los Controllers envían los casos de uso mediante `ISender.Send(command, cancellationToken)`. `AddApplication()` descubre los Handlers mediante `AddMediatR`, registra los Validators del mismo ensamblado mediante `AddValidatorsFromAssembly` y añade `ValidationBehavior<,>` al pipeline abierto:
 
-```csharp
-using FluentValidation;
+1. El Behavior ejecuta secuencialmente `ValidateAsync` para cada `IValidator<TRequest>` y propaga la cancelación.
+2. Si hay errores, lanza `FluentValidation.ValidationException` antes del Handler. La API devuelve `400` con `ValidationProblemDetails.errors`: nombres de campos y mensajes, sin valores ingresados.
+3. Con entrada válida, MediatR invoca el Handler una sola vez. El Handler no valida de nuevo.
 
-public sealed class CrearSolicitudValidator : AbstractValidator<CrearSolicitudCommand>
-{
-    public CrearSolicitudValidator()
-    {
-        RuleFor(x => x.Folio)
-            .NotEmpty().WithMessage("El folio es obligatorio.")
-            .MaximumLength(40);
+**Login.** `LoginCommand` recibe identificador, contraseña, preferencia de recordar sesión y modo solicitado. Los límites de entrada son 256 caracteres para el identificador y 4096 para la contraseña; no constituyen una política de creación de contraseñas. `LoginHandler` delega la verificación en `IAuthenticationService`. El servicio deberá contrastar la identidad, el estado de la cuenta y sus permisos reales, sin confiar en el modo elegido por el cliente.
 
-        RuleFor(x => x.InstitucionId)
-            .NotEmpty().WithMessage("La institución es obligatoria.");
+`IdentityAuthenticationService` busca con `UserManager` por correo si el identificador contiene `@` y por nombre en caso contrario. `CheckPasswordSignInAsync` respeta los requisitos de confirmación y bloqueo de Identity. Los fallos de contraseña cuentan para el bloqueo en cuentas que lo admitan; se conservan los valores predeterminados de Identity (5 intentos, 5 minutos), sujetos a aprobación. No existe una deshabilitación administrativa independiente en `IdentityUser`.
 
-        RuleFor(x => x.Descripcion)
-            .NotEmpty()
-            .MinimumLength(10).WithMessage("La descripción requiere al menos 10 caracteres.");
-    }
-}
-```
+Mientras no haya flujo de segundo factor, una cuenta con 2FA habilitado no recibe sesión. El adaptador comprueba el rol real con `IsInRoleAsync` y solo devuelve `Authorized` después de que termine `SignInAsync`. Recordar sesión controla la persistencia de la cookie, no los roles. El resultado no garantiza la recepción de la respuesta por el navegador. Application unifica los rechazos por credenciales, cuenta o acceso y distingue los fallos técnicos.
 
-> **Separación de responsabilidades:**
-> * **FluentValidation:** valida forma y consistencia de datos de entrada antes del Handler.
-> * **Domain:** protege invariantes fundamentales del negocio dentro de las entidades.
-> * **Autorización:** verifica identidad/permisos en la capa HTTP/seguridad, nunca dentro de un validador de formato.
+**Integración del host.** Infrastructure registra el adaptador y `SignInManager` por petición. API autentica mediante `Identity.Application` y ejecuta CORS → autenticación → autorización antes de los Controllers. La cookie `__Host-VyTSystems.Auth` es exclusiva del host (sin `Domain`, ruta `/`), `HttpOnly`, `Secure` y `SameSite=Lax`. El ticket tiene una ventana de 8 horas con renovación deslizante. Sin «Recordar sesión» el navegador recibe una cookie de sesión; con la preferencia activa, recibe una fecha de expiración. React no necesita leer ni almacenar su valor.
 
-### 6.3. Cómo implementar Handlers
-Los Handlers implementan `ICommandHandler<TCommand, TResult>` o `IQueryHandler<TQuery, TResult>`, dependen solo de abstracciones de `Application` y retornan `Result` / `Result<TResult>`:
+**Contrato HTTP de login (HTTPS):**
 
-```csharp
-public sealed class CrearSolicitudHandler(
-    ISolicitudRepository repository,
-    IUnitOfWork unitOfWork) : ICommandHandler<CrearSolicitudCommand, Guid>
-{
-    public async Task<Result<Guid>> HandleAsync(
-        CrearSolicitudCommand command,
-        CancellationToken cancellationToken = default)
-    {
-        var solicitud = Solicitud.Crear(command.Folio, command.InstitucionId, command.Descripcion);
+1. `GET /api/auth/csrf` devuelve `200` con `{ "requestToken": "…" }` y establece la cookie antifalsificación `__Host-VyTSystems.Csrf` (`HttpOnly`, `Secure`, `SameSite=Strict`). La respuesta no es almacenable en caché. Conservar el token de petición en memoria y dejar que el navegador administre las cookies.
+2. `POST /api/auth/login` recibe JSON con `identifier` (usuario o correo), `password`, `rememberSession` (booleano, por defecto `false`) y `requestedAccess` (`"Administrador"` o `"Consulta"`; también se admiten los valores del enum `1` y `2`). Enviar el token en `X-CSRF-TOKEN` junto con su cookie. Un par ausente o inválido se rechaza antes de MediatR.
+3. Éxito: `200` sin cuerpo; Identity emite la cookie de autenticación. Errores: `400` para datos o antifalsificación inválidos, `401` genérico para cualquier rechazo de acceso y `503` para servicio no disponible. Los errores usan Problem Details y las respuestas de login no deben almacenarse en caché.
+4. **Después del login, volver a solicitar `GET /api/auth/csrf`** con la cookie de sesión antes de la siguiente operación protegida: el token de petición anterior corresponde a la identidad anónima.
 
-        await repository.AddAsync(solicitud, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+**Consulta y cierre de sesión:**
 
-        return Result.Success(solicitud.Id);
-    }
-}
-```
+`AuthController` delega ambas operaciones a `IAuthenticatedSessionService` en `API/Services/Authentication/`. El servicio se resuelve por petición, obtiene el principal desde `IHttpContextAccessor` y cierra la cookie mediante el esquema `Identity.Application`. No consulta la base de datos.
 
-### 6.4. Cómo funciona el Dispatcher (`RequestDispatcher`)
-`RequestDispatcher` (en `Application/Common/CQRS/RequestDispatcher.cs`) implementa `ICommandDispatcher` e `IQueryDispatcher` manteniendo **una única estrategia de ejecución**:
-1. Resuelve desde DI todos los `FluentValidation.IValidator<TRequest>` registrados para el Command o Query.
-2. Ejecuta todas las validaciones **antes** de resolver el Handler.
-3. Si existen errores, corta el flujo inmediatamente devolviendo `Result.ValidationFailure(...)` **sin ejecutar el Handler**.
-4. Solo si la entrada es válida, resuelve e invoca el Handler correspondiente.
+- `GET /api/auth/me` devuelve `200` con `{ "userId": "…", "userName": "…", "roles": ["Consulta"] }`, sin caché. Usa el identificador, nombre y roles del principal autenticado, no el modo solicitado al entrar. Solo enumera `Administrador` y `Consulta`. Sin sesión válida o si faltan el identificador o el nombre, devuelve `401`.
+- `POST /api/auth/logout` requiere la cookie de sesión y el encabezado `X-CSRF-TOKEN` con el token obtenido **después del login**, junto con su cookie antifalsificación. Devuelve `204` sin cuerpo e indica al navegador que elimine la cookie de autenticación. Sin sesión devuelve `401`; con sesión pero sin un par CSRF válido, `400`. Tras el cierre se debe descartar el token asociado al usuario y obtener uno nuevo de `GET /api/auth/csrf` como cliente anónimo antes de otro login.
+- El cierre elimina la cookie del cliente, no revoca criptográficamente copias previas. Los roles del ticket pueden seguir vigentes hasta que Identity vuelva a validar la identidad y actualice o rechace el ticket, o hasta su expiración. Un cambio de rol en MySQL no se refleja instantáneamente. La API decide el acceso por los roles del principal; `/me` solo los comunica a la interfaz.
 
-En un `Controller` de `VyTSystems.API/Controllers/`:
-```csharp
-[ApiController]
-[Route("api/solicitudes")]
-public sealed class SolicitudesController(ICommandDispatcher commandDispatcher) : ControllerBase
-{
-    [HttpPost]
-    public async Task<IActionResult> Crear(CrearSolicitudCommand command, CancellationToken ct)
-    {
-        var result = await commandDispatcher.SendAsync<CrearSolicitudCommand, Guid>(command, ct);
-        if (result.IsFailure)
-        {
-            return BadRequest(new { error = result.Error, details = result.ValidationErrors });
-        }
+**React y operaciones futuras:**
 
-        return Created($"/api/solicitudes/{result.Value}", new { id = result.Value });
-    }
-}
-```
+- En desarrollo el navegador usa un único origen HTTPS. Vite conserva `/api` y valida el certificado de Kestrel; no se requieren permisos CORS adicionales. En producción el servidor web debe encaminar `/api` al backend y las rutas de navegación a `index.html`.
+- React envía `credentials: 'include'`, renueva el token CSRF en memoria al cambiar de identidad y consulta `/me` al entrar o recargar una ruta de sesión. Las guardas sólo presentan los paneles mínimos autorizados por los roles de la respuesta. Un error de red no se interpreta como cierre de sesión. Proteger las futuras operaciones de escritura también mediante antifalsificación.
+- Proteger cada endpoint mediante políticas o `[Authorize(Roles = "...")]` basados en `Administrador` y `Consulta`; no derivar permisos de `RequestedAccess`. En el futuro registro, crear cuentas con `UserManager.CreateAsync` y garantizar `LockoutEnabled = true` para las sujetas al bloqueo (`AllowedForNewUsers` está activo por defecto).
+- En despliegue, persistir el anillo de claves de ASP.NET Core Data Protection fuera del repositorio y del sistema de archivos efímero del contenedor. Restringir el acceso al proceso y cifrar las claves en reposo. Las réplicas de un mismo entorno deben compartir el anillo y el mismo nombre de aplicación; separar los entornos y conservar claves anteriores durante la rotación para no invalidar tickets vigentes.
+
+**Licencia.** Para MediatR 15 se utiliza Community. Suministra la clave al proceso backend mediante la variable `VYT_MEDIATR_LICENSE_KEY`, desde la configuración privada del entorno. No la guardes en el repositorio ni la imprimas.
 
 ---
 
@@ -307,12 +258,13 @@ public sealed record SolicitudDto(
 ### 7.7. Cómo utilizar Mapster desde un Handler
 ```csharp
 using MapsterMapper;
+using MediatR;
 
 public sealed class ConsultarSolicitudHandler(
     ISolicitudRepository repository,
-    IMapper mapper) : IQueryHandler<ConsultarSolicitudQuery, SolicitudDto>
+    IMapper mapper) : IRequestHandler<ConsultarSolicitudQuery, Result<SolicitudDto>>
 {
-    public async Task<Result<SolicitudDto>> HandleAsync(
+    public async Task<Result<SolicitudDto>> Handle(
         ConsultarSolicitudQuery query,
         CancellationToken cancellationToken = default)
     {
@@ -361,6 +313,7 @@ dotnet user-secrets set "ConnectionStrings:DefaultConnection" \
 *(También puede suministrarse mediante la variable de entorno `ConnectionStrings__DefaultConnection`).*
 
 ### Crear y aplicar migraciones reales (cuando exista el primer modelo aprobado)
+Iniciar la API no aplica migraciones ni ejecuta datos semilla, tampoco en `Development`. Revisa la migración generada y aplícala solo mediante una operación manual autorizada.
 ```bash
 cd "/home/beto/Proyectos_CV/VyTSystems/backend"
 
@@ -395,30 +348,43 @@ features/solicitudes/
 
 ## 10. Principios SOLID Obligatorios
 
-* **S — Single Responsibility:** `DependencyInjection.cs` solo registra servicios; `RequestDispatcher` solo despacha; cada `Validator`, `Handler` y `Repository` tiene una única razón de cambio.
+* **S — Single Responsibility:** el Behavior coordina la validación; cada Validator define reglas de entrada y cada Handler coordina un caso de uso.
 * **O — Open/Closed:** los nuevos Slices, validadores (`AddValidatorsFromAssembly`) y perfiles Mapster (`IRegister`) se incorporan sin modificar la infraestructura base.
 * **L — Liskov Substitution:** toda implementación de repositorio o seeder cumple íntegramente el contrato definido.
-* **I — Interface Segregation:** interfaces pequeñas y específicas (`ICommandDispatcher` separado de `IQueryDispatcher`, contratos por agregado).
+* **I — Interface Segregation:** interfaces pequeñas por necesidad; el login solo depende de la operación de autenticación.
 * **D — Dependency Inversion:** los casos de uso dependen de interfaces en `Application`, jamás de `VyTSystemsDbContext` ni de `MySql.EntityFrameworkCore`.
 
 ---
 
 ## 11. Ejecución Local de Backend y Frontend
 
-### Backend (`http://localhost:5080`)
+### Backend (`https://localhost:7080`)
 ```bash
 cd "/home/beto/Proyectos_CV/VyTSystems/backend"
 dotnet build VyTSystems.sln
-dotnet run --project VyTSystems.API
+dotnet dev-certs https --trust
+dotnet run --project VyTSystems.API --launch-profile https
 ```
 
-### Frontend (`http://localhost:5173`)
+### Frontend (`https://localhost:5173`)
+
+Una vez por certificado, exportar el certificado de desarrollo de ASP.NET Core para Vite **fuera del repositorio**, bajo el usuario que ejecuta ambos servidores. Al renovar el certificado repetir la exportación y reiniciar ambos. En Linux, comprobar que el navegador confía en el certificado de `localhost`; no omitir advertencias TLS.
+
+```bash
+(umask 077; mkdir -p ~/.config/vyt-systems/https && \
+  dotnet dev-certs https --export-path ~/.config/vyt-systems/https/localhost.pem --format PEM --no-password)
+```
+
 ```bash
 cd "/home/beto/Proyectos_CV/VyTSystems/frontend"
 npm install
 npm run build
 npm run dev
 ```
+
+Con Vite en ejecución, `npx playwright install chromium --only-shell` y `npm run test:auth` (desde `frontend/`) prueban el navegador con respuestas controladas de la API, sin cuentas de MySQL. Si Chromium en Linux usa un almacén NSS independiente, importar en ese perfil **sólo el certificado público de `localhost` como servidor de confianza**, por ejemplo `certutil -A -d sql:"$HOME/.local/share/pki/nssdb" -n "VyT localhost" -t 'P,,' -i "$HOME/.config/vyt-systems/https/localhost.pem"` (ajustar la ruta al almacén NSS del perfil). No importar la clave ni tratar ese certificado de servidor como una CA.
+
+**Prueba manual con MySQL:** en una ventana privada, abrir `/admin/login` desde `https://localhost:5173` e introducir las credenciales de `vyt-test-admin` en el formulario. Verificar `/admin/dashboard`, recargar, intentar `/consulta/dashboard` (acceso denegado), volver al panel y cerrar sesión. Al volver con «Atrás» no debe mostrarse el panel. Repetir desde `/consulta/login` con `vyt-test-consulta` e invertir los destinos. Probar con y sin «Recordar mi sesión»: en el inspector de almacenamiento comprobar únicamente los atributos `HttpOnly`, `Secure`, `SameSite=Lax`, ruta `/` y expiración (sesión o fecha) de `__Host-VyTSystems.Auth`, sin copiar valores. Con credenciales correctas en el formulario del otro rol se espera `401` sin sesión nueva. No exportar capturas, trazas ni archivos HAR con credenciales o cookies.
 
 ---
 

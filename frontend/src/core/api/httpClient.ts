@@ -7,6 +7,7 @@ export interface HttpRequestOptions<TBody = unknown> {
   body?: TBody;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  expectedStatus?: number;
 }
 
 export class HttpClientError extends Error {
@@ -47,6 +48,8 @@ export async function httpRequest<TResponse, TBody = unknown>(
 
   const response = await fetch(resolveApiUrl(path), {
     method,
+    credentials: 'include',
+    cache: 'no-store',
     headers: requestHeaders,
     body: body !== undefined ? JSON.stringify(body) : undefined,
     signal,
@@ -55,7 +58,7 @@ export async function httpRequest<TResponse, TBody = unknown>(
   const contentType = response.headers.get('content-type') ?? '';
   const isJson = contentType.includes('application/json') || contentType.includes('+json');
 
-  if (!response.ok) {
+  if (!response.ok || (options.expectedStatus !== undefined && response.status !== options.expectedStatus)) {
     const errorPayload = isJson ? await response.json().catch(() => undefined) : undefined;
     throw new HttpClientError(
       `El servidor respondió con código HTTP ${response.status}.`,

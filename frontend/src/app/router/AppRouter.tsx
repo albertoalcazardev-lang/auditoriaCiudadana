@@ -1,18 +1,20 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
+import { SessionRoute } from '../../features/auth/pages/SessionRoute';
+import { RegisterPage } from '../../features/auth/pages/RegisterPage';
 
 function BaseWelcomeView() {
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6 py-12">
-      <p className="text-xs font-semibold tracking-widest text-indigo-400 uppercase">
-        Solución Base · Task 00
-      </p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">
         VyT Systems
       </h1>
       <p className="mt-3 text-sm leading-relaxed text-slate-400">
-        Esqueleto arquitectónico preparado para el desarrollo colaborativo de módulos bajo Clean
-        Architecture, Vertical Slices, CQRS y MVVM.
+        Selecciona el acceso correspondiente a tu cuenta.
       </p>
+      <nav aria-label="Iniciar sesión" className="mt-4 flex gap-6 underline">
+        <Link to="/admin/login">Administrador</Link>
+        <Link to="/consulta/login">Consulta</Link>
+      </nav>
     </main>
   );
 }
@@ -22,6 +24,11 @@ export function AppRouter() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<BaseWelcomeView />} />
+        <Route path="/admin/login" element={<SessionRoute access="admin" login />} />
+        <Route path="/consulta/login" element={<SessionRoute access="consulta" login />} />
+        <Route path="/admin/dashboard" element={<SessionRoute access="admin" />} />
+        <Route path="/consulta/dashboard" element={<SessionRoute access="consulta" />} />
+        <Route path="/registro" element={<RegisterPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
