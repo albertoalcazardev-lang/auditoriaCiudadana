@@ -29,8 +29,10 @@ interface LogoutAction {
 interface AdminShellProps {
   session: Session;
   title: string;
-  breadcrumbParent: string;
-  breadcrumbCurrent: string;
+  breadcrumbParent?: string;
+  breadcrumbCurrent?: string;
+  subtitle?: string;
+  activeSection?: 'dashboard' | 'solicitudes';
   onNavigateDashboard: () => void;
   onNavigateSolicitudes?: () => void;
   logout: LogoutAction;
@@ -55,6 +57,8 @@ export function AdminShell({
   title,
   breadcrumbParent,
   breadcrumbCurrent,
+  subtitle,
+  activeSection = 'solicitudes',
   onNavigateDashboard,
   onNavigateSolicitudes,
   logout,
@@ -128,6 +132,15 @@ export function AdminShell({
     onNavigateDashboard();
   };
 
+  const handleSolicitudesClick = () => {
+    if (onNavigateSolicitudes) {
+      closeDrawer(false);
+      onNavigateSolicitudes();
+      return;
+    }
+    if (drawerOpen) closeDrawer(true);
+  };
+
   return (
     <div className="admin-shell">
       <div
@@ -164,6 +177,7 @@ export function AdminShell({
           <button
             type="button"
             className="admin-nav-item"
+            aria-current={activeSection === 'dashboard' ? 'page' : undefined}
             title="Dashboard"
             onClick={handleDashboardClick}
           >
@@ -174,16 +188,9 @@ export function AdminShell({
           <button
             type="button"
             className="admin-nav-item"
-            aria-current="page"
+            aria-current={activeSection === 'solicitudes' ? 'page' : undefined}
             title="Solicitudes"
-            onClick={() => {
-              if (onNavigateSolicitudes) {
-                closeDrawer(false);
-                onNavigateSolicitudes();
-              } else if (drawerOpen) {
-                closeDrawer(true);
-              }
-            }}
+            onClick={handleSolicitudesClick}
           >
             <ClipboardList size={18} aria-hidden="true" />
             <span className="admin-nav-label">Solicitudes</span>
@@ -245,11 +252,15 @@ export function AdminShell({
 
             <div className="admin-topbar-heading">
               <h1 className="admin-page-title">{title}</h1>
-              <nav aria-label="Breadcrumb" className="admin-breadcrumb">
-                <span>{breadcrumbParent}</span>
-                <span aria-hidden="true">›</span>
-                <span className="admin-breadcrumb-current">{breadcrumbCurrent}</span>
-              </nav>
+              {subtitle !== undefined ? (
+                <p className="admin-breadcrumb">{subtitle}</p>
+              ) : (
+                <nav aria-label="Breadcrumb" className="admin-breadcrumb">
+                  <span>{breadcrumbParent}</span>
+                  <span aria-hidden="true">›</span>
+                  <span className="admin-breadcrumb-current">{breadcrumbCurrent}</span>
+                </nav>
+              )}
             </div>
           </div>
 

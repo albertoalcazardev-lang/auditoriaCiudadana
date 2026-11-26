@@ -1,6 +1,7 @@
 import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { SessionRoute } from '../../features/auth/pages/SessionRoute';
 import { RegisterPage } from '../../features/auth/pages/RegisterPage';
+import { DashboardPage } from '../../features/dashboard/pages/DashboardPage';
 import { NuevaSolicitudPage } from '../../features/solicitudes/pages/NuevaSolicitudPage';
 import { EditarSolicitudPage } from '../../features/solicitudes/pages/EditarSolicitudPage';
 import { SolicitudesListadoPage } from '../../features/solicitudes/pages/SolicitudesListadoPage';
@@ -30,7 +31,8 @@ export function AppRouter() {
         <Route path="/" element={<BaseWelcomeView />} />
         <Route path="/admin/login" element={<SessionRoute access="admin" login />} />
         <Route path="/consulta/login" element={<SessionRoute access="consulta" login />} />
-        <Route path="/admin/dashboard" element={<SessionRoute access="admin" />} />
+        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin/dashboard" element={<DashboardPage />} />
         <Route path="/admin/solicitudes" element={<SolicitudesListadoPage />} />
         <Route path="/admin/solicitudes/nueva" element={<NuevaSolicitudPage />} />
         <Route path="/admin/solicitudes/:folio/editar" element={<EditarSolicitudPage />} />
