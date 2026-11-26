@@ -36,6 +36,7 @@ function EditarSolicitudWorkspace({
       breadcrumbParent="Solicitudes"
       breadcrumbCurrent="Editar solicitud"
       onNavigateDashboard={vm.requestExitToDashboard}
+      onNavigateSolicitudes={vm.requestExitToSolicitudes}
       logout={logout}
     >
       {vm.toast && (
@@ -113,7 +114,7 @@ function EditarSolicitudWorkspace({
           {
             label: 'Descartar',
             variant: 'danger',
-            onClick: vm.confirmExitToDashboard,
+            onClick: vm.confirmDiscardExit,
           },
         ]}
       />
@@ -140,7 +141,7 @@ function EditarSolicitudWorkspace({
           {
             label: 'Descartar',
             variant: 'danger',
-            onClick: vm.confirmExitToDashboard,
+            onClick: vm.confirmDiscardExit,
           },
         ]}
       />

@@ -23,6 +23,13 @@ internal static class ResultActionResultExtensions
             ? controller.ToFailureResult(result)
             : controller.Ok(map(result.Value));
 
+    public static IActionResult ToNoContentResult(
+        this ControllerBase controller,
+        Result result) =>
+        result.IsFailure
+            ? controller.ToFailureResult(result)
+            : controller.NoContent();
+
     public static IActionResult ToActionResultWithETag<TSource, TResponse>(
         this ControllerBase controller,
         Result<TSource> result,
@@ -96,6 +103,26 @@ internal static class ResultActionResultExtensions
                 result.Error.Code);
         }
 
+        if (result.Error.Type == ErrorType.PreconditionFailed)
+        {
+            return BuildProblemResult(
+                controller,
+                StatusCodes.Status412PreconditionFailed,
+                "Precondición fallida",
+                result.Error.Description,
+                result.Error.Code);
+        }
+
+        if (result.Error.Type == ErrorType.PreconditionRequired)
+        {
+            return BuildProblemResult(
+                controller,
+                StatusCodes.Status428PreconditionRequired,
+                "Precondición requerida",
+                result.Error.Description,
+                result.Error.Code);
+        }
+
         if (result.Error.Type == ErrorType.NotFound)
         {
             return BuildProblemResult(
@@ -138,6 +165,9 @@ internal static class ResultActionResultExtensions
             title: title,
             detail: detail,
             instance: controller.HttpContext.Request.Path);
+        problem.Type ??= statusCode == StatusCodes.Status428PreconditionRequired
+            ? "https://tools.ietf.org/html/rfc6585#section-3"
+            : "about:blank";
         problem.Extensions["code"] = code;
 
         return new ObjectResult(problem)

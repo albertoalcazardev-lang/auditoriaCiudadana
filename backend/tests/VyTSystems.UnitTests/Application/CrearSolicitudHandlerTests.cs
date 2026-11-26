@@ -123,6 +123,14 @@ public sealed class CrearSolicitudHandlerTests
         Assert.Equal(ErrorType.Conflict, idempConflict.Error.Type);
         Assert.Equal("Solicitud.IdempotenciaConflicto", idempConflict.Error.Code);
 
+        var idempEliminada = await new CrearSolicitudHandler(
+            new StubPersistence((_, _) => RegistroSolicitudOutcome.IdempotenciaSolicitudEliminada()),
+            mapper,
+            timeProvider).Handle(ComandoBase(), CancellationToken.None);
+        Assert.True(idempEliminada.IsFailure);
+        Assert.Equal(ErrorType.Conflict, idempEliminada.Error.Type);
+        Assert.Equal("Solicitud.IdempotenciaRegistroEliminado", idempEliminada.Error.Code);
+
         var areaInvalida = await new CrearSolicitudHandler(
             new StubPersistence((_, _) => RegistroSolicitudOutcome.AreaReceptoraInvalida()),
             mapper,

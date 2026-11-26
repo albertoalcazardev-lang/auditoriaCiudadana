@@ -93,6 +93,8 @@ public sealed class CrearSolicitudHandler(
                 Error.Conflict("Solicitud.FolioDuplicado", "El folio ingresado ya está registrado. Introduce uno diferente.")),
             RegistroSolicitudEstado.IdempotenciaConflicto => Result.Failure<CrearSolicitudResult>(
                 Error.Conflict("Solicitud.IdempotenciaConflicto", "La clave de idempotencia ya fue utilizada con una solicitud diferente.")),
+            RegistroSolicitudEstado.IdempotenciaSolicitudEliminada => Result.Failure<CrearSolicitudResult>(
+                Error.Conflict("Solicitud.IdempotenciaRegistroEliminado", "La clave de idempotencia ya fue utilizada en una solicitud previamente eliminada y no puede reutilizarse.")),
             RegistroSolicitudEstado.AreaReceptoraInvalida => Result.ValidationFailure<CrearSolicitudResult>(
                 [new ValidationError("AreaReceptoraId", "El área receptora seleccionada no existe o no está activa.")]),
             _ => Result.Failure<CrearSolicitudResult>(

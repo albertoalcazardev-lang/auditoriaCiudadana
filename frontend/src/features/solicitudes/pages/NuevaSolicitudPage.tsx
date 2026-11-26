@@ -33,6 +33,7 @@ function NuevaSolicitudWorkspace({
       breadcrumbParent="Solicitudes"
       breadcrumbCurrent="Nueva solicitud"
       onNavigateDashboard={vm.requestExitToDashboard}
+      onNavigateSolicitudes={vm.requestExitToSolicitudes}
       logout={logout}
     >
       {vm.submitStatus === 'succeeded' && vm.confirmacion ? (
@@ -93,7 +94,7 @@ function NuevaSolicitudWorkspace({
           {
             label: 'Descartar',
             variant: 'danger',
-            onClick: vm.confirmExitToDashboard,
+            onClick: vm.confirmDiscardExit,
           },
         ]}
       />
@@ -119,7 +120,7 @@ function NuevaSolicitudWorkspace({
           {
             label: 'Salir al panel',
             variant: 'danger',
-            onClick: vm.confirmExitToDashboard,
+            onClick: vm.confirmDiscardExit,
           },
         ]}
       />

@@ -3,6 +3,8 @@ import { SessionRoute } from '../../features/auth/pages/SessionRoute';
 import { RegisterPage } from '../../features/auth/pages/RegisterPage';
 import { NuevaSolicitudPage } from '../../features/solicitudes/pages/NuevaSolicitudPage';
 import { EditarSolicitudPage } from '../../features/solicitudes/pages/EditarSolicitudPage';
+import { SolicitudesListadoPage } from '../../features/solicitudes/pages/SolicitudesListadoPage';
+import { DetalleSolicitudPage } from '../../features/solicitudes/pages/DetalleSolicitudPage';
 
 function BaseWelcomeView() {
   return (
@@ -29,8 +31,10 @@ export function AppRouter() {
         <Route path="/admin/login" element={<SessionRoute access="admin" login />} />
         <Route path="/consulta/login" element={<SessionRoute access="consulta" login />} />
         <Route path="/admin/dashboard" element={<SessionRoute access="admin" />} />
+        <Route path="/admin/solicitudes" element={<SolicitudesListadoPage />} />
         <Route path="/admin/solicitudes/nueva" element={<NuevaSolicitudPage />} />
         <Route path="/admin/solicitudes/:folio/editar" element={<EditarSolicitudPage />} />
+        <Route path="/admin/solicitudes/:folio" element={<DetalleSolicitudPage />} />
         <Route path="/consulta/dashboard" element={<SessionRoute access="consulta" />} />
         <Route path="/registro" element={<RegisterPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

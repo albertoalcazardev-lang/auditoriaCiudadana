@@ -7,6 +7,8 @@ using VyTSystems.Application.Common.Mapping;
 using VyTSystems.Application.Common.Results;
 using VyTSystems.Application.Solicitudes.Crear;
 using VyTSystems.Application.Solicitudes.Editar;
+using VyTSystems.Application.Solicitudes.Eliminar;
+using VyTSystems.Application.Solicitudes.Listar;
 using VyTSystems.Application.Solicitudes.ObtenerParaEdicion;
 
 namespace VyTSystems.UnitTests.Application;
@@ -30,6 +32,8 @@ public sealed class SolicitudMappingAndPipelineTests
         Assert.Contains(services, d => d.ServiceType == typeof(IValidator<CrearSolicitudCommand>));
         Assert.Contains(services, d => d.ServiceType == typeof(IValidator<ObtenerSolicitudParaEdicionQuery>));
         Assert.Contains(services, d => d.ServiceType == typeof(IValidator<EditarSolicitudCommand>));
+        Assert.Contains(services, d => d.ServiceType == typeof(IValidator<ListarSolicitudesQuery>));
+        Assert.Contains(services, d => d.ServiceType == typeof(IValidator<EliminarSolicitudCommand>));
         Assert.Contains(services, d => d.ServiceType == typeof(IPipelineBehavior<,>)
             && d.ImplementationType == typeof(ValidationBehavior<,>));
     }

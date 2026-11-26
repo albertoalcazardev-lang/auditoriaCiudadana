@@ -32,6 +32,7 @@ interface AdminShellProps {
   breadcrumbParent: string;
   breadcrumbCurrent: string;
   onNavigateDashboard: () => void;
+  onNavigateSolicitudes?: () => void;
   logout: LogoutAction;
   children: ReactNode;
 }
@@ -55,6 +56,7 @@ export function AdminShell({
   breadcrumbParent,
   breadcrumbCurrent,
   onNavigateDashboard,
+  onNavigateSolicitudes,
   logout,
   children,
 }: AdminShellProps) {
@@ -175,7 +177,12 @@ export function AdminShell({
             aria-current="page"
             title="Solicitudes"
             onClick={() => {
-              if (drawerOpen) closeDrawer(true);
+              if (onNavigateSolicitudes) {
+                closeDrawer(false);
+                onNavigateSolicitudes();
+              } else if (drawerOpen) {
+                closeDrawer(true);
+              }
             }}
           >
             <ClipboardList size={18} aria-hidden="true" />

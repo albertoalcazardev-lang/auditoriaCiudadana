@@ -28,14 +28,15 @@ internal sealed class SolicitudRegistroPersistence(
     {
         try
         {
-            var existente = await ConsultarPorIdempotenciaAsync(
+            var outcomePrevio = await ConsultarOutcomeIdempotenciaAsync(
                 request.CreadoPorUsuarioId,
                 request.IdempotencyKey,
+                request.IdempotencyPayloadHash,
                 cancellationToken);
 
-            if (existente is not null)
+            if (outcomePrevio is not null)
             {
-                return ResolverResultadoIdempotente(existente, request.IdempotencyPayloadHash);
+                return outcomePrevio;
             }
 
             var areaActiva = await dbContext.AreasReceptoras
@@ -65,16 +66,17 @@ internal sealed class SolicitudRegistroPersistence(
                             tx,
                             cancellationToken);
 
-                        // Tras adquirir el lock bajo READ COMMITTED, un reintento concurrente idéntico ya es visible.
-                        var existenteEnLock = await ConsultarPorIdempotenciaAsync(
+                        // Tras adquirir el lock bajo READ COMMITTED, un reintento o eliminación concurrente ya es visible.
+                        var outcomeEnLock = await ConsultarOutcomeIdempotenciaAsync(
                             request.CreadoPorUsuarioId,
                             request.IdempotencyKey,
+                            request.IdempotencyPayloadHash,
                             cancellationToken);
 
-                        if (existenteEnLock is not null)
+                        if (outcomeEnLock is not null)
                         {
                             await RollbackSafeAsync(tx);
-                            return ResolverResultadoIdempotente(existenteEnLock, request.IdempotencyPayloadHash);
+                            return outcomeEnLock;
                         }
 
                         var (folioAsignado, consecutivoAsignado) = await ResolverSiguienteFolioDisponibleAsync(
@@ -92,6 +94,18 @@ internal sealed class SolicitudRegistroPersistence(
                     }
                     else
                     {
+                        var outcomeManual = await ConsultarOutcomeIdempotenciaAsync(
+                            request.CreadoPorUsuarioId,
+                            request.IdempotencyKey,
+                            request.IdempotencyPayloadHash,
+                            cancellationToken);
+
+                        if (outcomeManual is not null)
+                        {
+                            await RollbackSafeAsync(tx);
+                            return outcomeManual;
+                        }
+
                         folioParaEntidad = request.FolioManual!;
                     }
 
@@ -120,14 +134,15 @@ internal sealed class SolicitudRegistroPersistence(
                     var mysqlEx = PersistenceExceptionClassifier.ObtenerMySqlException(ex);
                     if (mysqlEx?.Number == 1062)
                     {
-                        var existentePostConflicto = await ConsultarPorIdempotenciaAsync(
+                        var outcomePostConflicto = await ConsultarOutcomeIdempotenciaAsync(
                             request.CreadoPorUsuarioId,
                             request.IdempotencyKey,
+                            request.IdempotencyPayloadHash,
                             cancellationToken);
 
-                        if (existentePostConflicto is not null)
+                        if (outcomePostConflicto is not null)
                         {
-                            return ResolverResultadoIdempotente(existentePostConflicto, request.IdempotencyPayloadHash);
+                            return outcomePostConflicto;
                         }
 
                         if (!request.GenerarFolioAutomatico)
@@ -172,6 +187,30 @@ internal sealed class SolicitudRegistroPersistence(
             LogFalloPersistencia(ex, PersistenceExceptionClassifier.ObtenerMySqlException(ex));
             return RegistroSolicitudOutcome.PersistenciaNoDisponible();
         }
+    }
+
+    private async Task<RegistroSolicitudOutcome?> ConsultarOutcomeIdempotenciaAsync(
+        string usuarioId,
+        string idempotencyKey,
+        string payloadHash,
+        CancellationToken cancellationToken)
+    {
+        // Orden estricto de lectura: 1.º solicitudes, 2.º solicitud_idempotencias_eliminadas
+        var existente = await ConsultarPorIdempotenciaAsync(usuarioId, idempotencyKey, cancellationToken);
+        if (existente is not null)
+        {
+            return ResolverResultadoIdempotente(existente, payloadHash);
+        }
+
+        var eliminadaPreviamente = await dbContext.SolicitudIdempotenciasEliminadas
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.CreadoPorUsuarioId == usuarioId && x.IdempotencyKey == idempotencyKey,
+                cancellationToken);
+
+        return eliminadaPreviamente
+            ? RegistroSolicitudOutcome.IdempotenciaSolicitudEliminada()
+            : null;
     }
 
     private async Task<RegistroIdempotente?> ConsultarPorIdempotenciaAsync(

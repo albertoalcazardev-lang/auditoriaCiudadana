@@ -50,6 +50,8 @@ public static class DependencyInjection
         services.AddScoped<ISolicitudRegistroPersistence, SolicitudRegistroPersistence>();
         services.AddScoped<ISolicitudEdicionReadRepository, SolicitudEdicionReadRepository>();
         services.AddScoped<ISolicitudEdicionPersistence, SolicitudEdicionPersistence>();
+        services.AddScoped<ISolicitudListadoReadRepository, SolicitudListadoReadRepository>();
+        services.AddScoped<ISolicitudEliminacionPersistence, SolicitudEliminacionPersistence>();
         services.AddScoped<DatabaseInitializer>();
 
         return services;

@@ -24,7 +24,8 @@ public enum RegistroSolicitudEstado
     IdempotenciaConflicto = 3,
     FolioDuplicado = 4,
     AreaReceptoraInvalida = 5,
-    PersistenciaNoDisponible = 6
+    PersistenciaNoDisponible = 6,
+    IdempotenciaSolicitudEliminada = 7
 }
 
 /// <summary>
@@ -42,6 +43,9 @@ public sealed record RegistroSolicitudOutcome(
 
     public static RegistroSolicitudOutcome IdempotenciaConflicto() =>
         new(RegistroSolicitudEstado.IdempotenciaConflicto);
+
+    public static RegistroSolicitudOutcome IdempotenciaSolicitudEliminada() =>
+        new(RegistroSolicitudEstado.IdempotenciaSolicitudEliminada);
 
     public static RegistroSolicitudOutcome FolioDuplicado() =>
         new(RegistroSolicitudEstado.FolioDuplicado);

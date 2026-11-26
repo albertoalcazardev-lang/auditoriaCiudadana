@@ -116,6 +116,9 @@ export function useEditarSolicitudViewModel(routeFolio: string) {
   const isSubmittingRef = useRef(false);
   const reloadSeqRef = useRef(0);
   const allowExitRef = useRef(false);
+  const pendingExitDestinationRef = useRef<'/admin/dashboard' | '/admin/solicitudes'>(
+    '/admin/dashboard',
+  );
   const fieldRefs = useRef<Partial<Record<SolicitudEditableFieldName, HTMLElement | null>>>({});
   const toastTimerRef = useRef<number | null>(null);
   const toastSeqRef = useRef(0);
@@ -727,6 +730,7 @@ export function useEditarSolicitudViewModel(routeFolio: string) {
 
   const requestCancel = useCallback(() => {
     if (submitStatus === 'submitting' || isReloadingDatos) return;
+    pendingExitDestinationRef.current = '/admin/dashboard';
     if (submitStatus === 'uncertain') {
       setModalState('confirm-uncertain-exit');
       return;
@@ -736,6 +740,7 @@ export function useEditarSolicitudViewModel(routeFolio: string) {
 
   const requestExitToDashboard = useCallback(() => {
     if (submitStatus === 'submitting' || isReloadingDatos) return;
+    pendingExitDestinationRef.current = '/admin/dashboard';
     if (submitStatus === 'uncertain') {
       setModalState('confirm-uncertain-exit');
       return;
@@ -748,11 +753,38 @@ export function useEditarSolicitudViewModel(routeFolio: string) {
     navigate('/admin/dashboard');
   }, [isDirty, isReloadingDatos, navigate, submitStatus]);
 
+  const requestExitToSolicitudes = useCallback(() => {
+    if (submitStatus === 'submitting' || isReloadingDatos) return;
+    if (submitStatus === 'uncertain') {
+      pendingExitDestinationRef.current = '/admin/solicitudes';
+      setModalState('confirm-uncertain-exit');
+      return;
+    }
+    if (isDirty && submitStatus !== 'succeeded') {
+      pendingExitDestinationRef.current = '/admin/solicitudes';
+      setModalState('confirm-discard');
+      return;
+    }
+    pendingExitDestinationRef.current = '/admin/dashboard';
+    allowExitRef.current = true;
+    navigate('/admin/solicitudes');
+  }, [isDirty, isReloadingDatos, navigate, submitStatus]);
+
   const closeDiscardModal = useCallback(() => {
+    pendingExitDestinationRef.current = '/admin/dashboard';
     setModalState('none');
   }, []);
 
+  const confirmDiscardExit = useCallback(() => {
+    const destination = pendingExitDestinationRef.current;
+    pendingExitDestinationRef.current = '/admin/dashboard';
+    allowExitRef.current = true;
+    setModalState('none');
+    navigate(destination);
+  }, [navigate]);
+
   const confirmExitToDashboard = useCallback(() => {
+    pendingExitDestinationRef.current = '/admin/dashboard';
     allowExitRef.current = true;
     setModalState('none');
     navigate('/admin/dashboard');
@@ -805,7 +837,9 @@ export function useEditarSolicitudViewModel(routeFolio: string) {
     reloadAfterConflict,
     requestCancel,
     requestExitToDashboard,
+    requestExitToSolicitudes,
     closeDiscardModal,
+    confirmDiscardExit,
     confirmExitToDashboard,
     continueEditing,
   };

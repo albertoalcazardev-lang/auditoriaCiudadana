@@ -206,6 +206,9 @@ internal sealed class SolicitudConfiguration : IEntityTypeConfiguration<Solicitu
         builder.HasIndex(x => x.AreaReceptoraId)
             .HasDatabaseName("IX_solicitudes_area_receptora_id");
 
+        builder.HasIndex(x => x.FechaEntrega)
+            .HasDatabaseName("IX_solicitudes_fecha_entrega");
+
         builder.HasIndex(x => x.FechaVencimiento)
             .HasDatabaseName("IX_solicitudes_fecha_vencimiento");
 

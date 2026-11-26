@@ -451,6 +451,9 @@ namespace VyTSystems.Infrastructure.Persistence.Migrations
                     b.HasIndex("AreaReceptoraId")
                         .HasDatabaseName("IX_solicitudes_area_receptora_id");
 
+                    b.HasIndex("FechaEntrega")
+                        .HasDatabaseName("IX_solicitudes_fecha_entrega");
+
                     b.HasIndex("FechaVencimiento")
                         .HasDatabaseName("IX_solicitudes_fecha_vencimiento");
 
@@ -511,6 +514,47 @@ namespace VyTSystems.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_folio_secuencias_anio_valido", "anio BETWEEN 1 AND 9999");
 
                             t.HasCheckConstraint("CK_folio_secuencias_ultimo_numero_no_negativo", "ultimo_numero >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("VyTSystems.Infrastructure.Persistence.Entities.SolicitudIdempotenciaEliminada", b =>
+                {
+                    b.Property<string>("CreadoPorUsuarioId")
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)")
+                        .HasColumnName("creado_por_usuario_id");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("idempotency_key")
+                        .HasAnnotation("MySQL:Collation", "utf8mb4_0900_as_cs");
+
+                    b.Property<DateTime>("EliminadoEnUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("eliminado_en_utc");
+
+                    b.Property<string>("IdempotencyPayloadHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("char(64)")
+                        .HasColumnName("idempotency_payload_hash")
+                        .IsFixedLength()
+                        .HasAnnotation("MySQL:Collation", "utf8mb4_0900_as_cs");
+
+                    b.Property<Guid>("SolicitudId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("solicitud_id");
+
+                    b.HasKey("CreadoPorUsuarioId", "IdempotencyKey");
+
+                    b.ToTable("solicitud_idempotencias_eliminadas", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_solicitud_idempotencias_eliminadas_hash_longitud", "CHAR_LENGTH(idempotency_payload_hash) = 64");
+
+                            t.HasCheckConstraint("CK_solicitud_idempotencias_eliminadas_key_no_vacio", "CHAR_LENGTH(TRIM(idempotency_key)) BETWEEN 1 AND 100");
+
+                            t.HasCheckConstraint("CK_solicitud_idempotencias_eliminadas_usuario_no_vacio", "CHAR_LENGTH(TRIM(creado_por_usuario_id)) BETWEEN 1 AND 36");
                         });
                 });
 
@@ -582,6 +626,16 @@ namespace VyTSystems.Infrastructure.Persistence.Migrations
                         .HasConstraintName("FK_solicitudes_asp_net_users_creado_por_usuario_id");
 
                     b.Navigation("AreaReceptora");
+                });
+
+            modelBuilder.Entity("VyTSystems.Infrastructure.Persistence.Entities.SolicitudIdempotenciaEliminada", b =>
+                {
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreadoPorUsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_solicitud_idempotencias_eliminadas_asp_net_users_usuario_id");
                 });
 #pragma warning restore 612, 618
         }
