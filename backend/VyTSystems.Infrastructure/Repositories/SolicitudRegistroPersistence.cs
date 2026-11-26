@@ -99,6 +99,7 @@ internal sealed class SolicitudRegistroPersistence(
                     var entry = dbContext.Solicitudes.Add(solicitud);
                     entry.Property("IdempotencyKey").CurrentValue = request.IdempotencyKey;
                     entry.Property("IdempotencyPayloadHash").CurrentValue = request.IdempotencyPayloadHash;
+                    entry.Property("ConcurrencyToken").CurrentValue = Guid.NewGuid().ToString("N");
 
                     await dbContext.SaveChangesAsync(cancellationToken);
                     await tx.CommitAsync(cancellationToken);

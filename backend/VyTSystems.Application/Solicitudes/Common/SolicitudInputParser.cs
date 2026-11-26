@@ -1,15 +1,18 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 
-namespace VyTSystems.Application.Solicitudes.Crear;
+namespace VyTSystems.Application.Solicitudes.Common;
 
 /// <summary>
-/// Rutinas compartidas de validación sintáctica y parseo para entradas del registro de solicitudes.
+/// Rutinas compartidas de validación sintáctica y parseo para entradas del módulo de solicitudes.
 /// </summary>
 internal static partial class SolicitudInputParser
 {
     [GeneratedRegex(@"^[A-Za-z0-9._:-]{1,100}$", RegexOptions.CultureInvariant)]
     private static partial Regex IdempotencyKeyRegex();
+
+    [GeneratedRegex(@"^[\x21\x23-\x7E]{1,128}$", RegexOptions.CultureInvariant)]
+    private static partial Regex VersionConcurrenciaRegex();
 
     public static bool EsIdempotencyKeyValida(string? raw)
     {
@@ -19,6 +22,18 @@ internal static partial class SolicitudInputParser
         }
 
         return IdempotencyKeyRegex().IsMatch(raw);
+    }
+
+    public static bool EsVersionConcurrenciaValida(string? raw)
+    {
+        if (string.IsNullOrEmpty(raw) ||
+            string.Equals(raw, "*", StringComparison.Ordinal) ||
+            raw.Any(char.IsControl))
+        {
+            return false;
+        }
+
+        return VersionConcurrenciaRegex().IsMatch(raw);
     }
 
     public static bool TryParseFecha(string? raw, out DateOnly fecha)
@@ -53,16 +68,19 @@ internal static partial class SolicitudInputParser
             out hora);
     }
 
-    public static bool TryParseAreaReceptoraId(string? raw, out Guid areaId)
+    public static bool TryParseGuidNoVacio(string? raw, out Guid id)
     {
-        areaId = Guid.Empty;
+        id = Guid.Empty;
         if (string.IsNullOrWhiteSpace(raw) || raw.Any(char.IsControl))
         {
             return false;
         }
 
-        return Guid.TryParse(raw.Trim(), out areaId) && areaId != Guid.Empty;
+        return Guid.TryParse(raw.Trim(), out id) && id != Guid.Empty;
     }
+
+    public static bool TryParseAreaReceptoraId(string? raw, out Guid areaId) =>
+        TryParseGuidNoVacio(raw, out areaId);
 
     public static bool TryParseEnumName<TEnum>(string? raw, out TEnum value)
         where TEnum : struct, Enum

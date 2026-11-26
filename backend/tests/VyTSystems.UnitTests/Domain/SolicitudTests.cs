@@ -224,4 +224,182 @@ public sealed class SolicitudTests
     {
         Assert.Equal(esperado, Solicitud.EsFolioValido(folio));
     }
+
+    [Fact]
+    public void ActualizarDatos_Con11CamposValidos_ActualizaEditablesYMantieneInmutables6AtributosDeIdentidadYFolio()
+    {
+        var solicitud = CrearSolicitudValida(
+            folio: "  0012-AbC/2026_1.0  ",
+            usuarioId: "admin-original-01",
+            creadoEnUtc: UtcValido,
+            esAutomatico: false);
+
+        var idOriginal = solicitud.Id;
+        var folioOriginal = solicitud.Folio;
+        var folioNormalizadoOriginal = solicitud.FolioNormalizado;
+        var esAutoOriginal = solicitud.EsFolioAutomatico;
+        var usuarioOriginal = solicitud.CreadoPorUsuarioId;
+        var creadoEnOriginal = solicitud.CreadoEnUtc;
+
+        var areaAnterior = AreaReceptora.Crear("Área Original", 1, true, AreaIdValida);
+        typeof(Solicitud).GetProperty(nameof(Solicitud.AreaReceptora))!
+            .SetValue(solicitud, areaAnterior);
+
+        var nuevaAreaId = Guid.Parse("01950000-0000-7000-8000-000000000002");
+        var nuevaFechaEntrega = new DateOnly(2026, 6, 1);
+        var nuevaFechaVencimiento = new DateOnly(2026, 6, 15);
+
+        solicitud.ActualizarDatos(
+            nuevaFechaEntrega,
+            new TimeOnly(18, 45, 59),
+            nuevaAreaId,
+            "  Asunto editado y recortado  ",
+            MedioEntrega.CorreoElectronico,
+            EstatusEntrega.Entregada,
+            TipoSolicitud.Aclaracion,
+            TipoEvidencia.Link,
+            false,
+            TipoAcuse.NoAplica,
+            nuevaFechaVencimiento);
+
+        // 6 atributos estrictamente inmutables
+        Assert.Equal(idOriginal, solicitud.Id);
+        Assert.Equal(folioOriginal, solicitud.Folio);
+        Assert.Equal(folioNormalizadoOriginal, solicitud.FolioNormalizado);
+        Assert.Equal(esAutoOriginal, solicitud.EsFolioAutomatico);
+        Assert.Equal(usuarioOriginal, solicitud.CreadoPorUsuarioId);
+        Assert.Equal(creadoEnOriginal, solicitud.CreadoEnUtc);
+
+        // 11 atributos editables actualizados + normalización de hora y asunto + navegación limpiada
+        Assert.Equal(nuevaFechaEntrega, solicitud.FechaEntrega);
+        Assert.Equal(new TimeOnly(18, 45), solicitud.HoraEntrega);
+        Assert.Equal(0, solicitud.HoraEntrega.Second);
+        Assert.Equal(nuevaAreaId, solicitud.AreaReceptoraId);
+        Assert.Null(solicitud.AreaReceptora);
+        Assert.Equal("Asunto editado y recortado", solicitud.Asunto);
+        Assert.Equal(MedioEntrega.CorreoElectronico, solicitud.MedioEntrega);
+        Assert.Equal(EstatusEntrega.Entregada, solicitud.EstatusEntrega);
+        Assert.Equal(TipoSolicitud.Aclaracion, solicitud.TipoSolicitud);
+        Assert.Equal(TipoEvidencia.Link, solicitud.TipoEvidencia);
+        Assert.False(solicitud.TieneAcuse);
+        Assert.Equal(TipoAcuse.NoAplica, solicitud.TipoAcuse);
+        Assert.Equal(nuevaFechaVencimiento, solicitud.FechaVencimiento);
+
+        // Recálculo coherente de días restantes y estatus efectivo
+        Assert.Equal(5, solicitud.CalcularDiasRestantes(new DateOnly(2026, 6, 10)));
+        Assert.Equal(EstatusEfectivo.Entregada, solicitud.ObtenerEstatusEfectivo(new DateOnly(2026, 6, 30)));
+    }
+
+    [Fact]
+    public void ActualizarDatos_CasosBordePlazoAsuntoAreaEnumsYAcuse_ValidaIgualQueCrear()
+    {
+        var solicitud = CrearSolicitudValida();
+        var mismaFecha = new DateOnly(2026, 7, 10);
+        var asunto100 = "  " + new string('m', 100) + "  ";
+
+        solicitud.ActualizarDatos(
+            mismaFecha,
+            new TimeOnly(0, 0),
+            AreaIdValida,
+            asunto100,
+            MedioEntrega.Impreso,
+            EstatusEntrega.EnProceso,
+            TipoSolicitud.Otro,
+            TipoEvidencia.Carpeta,
+            true,
+            TipoAcuse.Folio,
+            mismaFecha);
+
+        Assert.Equal(mismaFecha, solicitud.FechaEntrega);
+        Assert.Equal(mismaFecha, solicitud.FechaVencimiento);
+        Assert.Equal(new TimeOnly(0, 0), solicitud.HoraEntrega);
+        Assert.Equal(100, solicitud.Asunto.Length);
+        Assert.Equal(EstatusEfectivo.Vencida, solicitud.ObtenerEstatusEfectivo(new DateOnly(2026, 7, 11)));
+
+        Assert.Throws<DomainException>(() => solicitud.ActualizarDatos(
+            default, new TimeOnly(10, 0), AreaIdValida, "Asunto", MedioEntrega.Digital,
+            EstatusEntrega.EnProceso, TipoSolicitud.Informacion, TipoEvidencia.Carpeta, false, TipoAcuse.NoAplica, mismaFecha));
+
+        Assert.Throws<DomainException>(() => solicitud.ActualizarDatos(
+            mismaFecha, new TimeOnly(10, 0), AreaIdValida, "Asunto", MedioEntrega.Digital,
+            EstatusEntrega.EnProceso, TipoSolicitud.Informacion, TipoEvidencia.Carpeta, false, TipoAcuse.NoAplica, default));
+
+        Assert.Throws<DomainException>(() => solicitud.ActualizarDatos(
+            new DateOnly(2026, 7, 10), new TimeOnly(10, 0), AreaIdValida, "Asunto", MedioEntrega.Digital,
+            EstatusEntrega.EnProceso, TipoSolicitud.Informacion, TipoEvidencia.Carpeta, false, TipoAcuse.NoAplica, new DateOnly(2026, 7, 9)));
+
+        Assert.Throws<DomainException>(() => solicitud.ActualizarDatos(
+            mismaFecha, new TimeOnly(10, 0), Guid.Empty, "Asunto", MedioEntrega.Digital,
+            EstatusEntrega.EnProceso, TipoSolicitud.Informacion, TipoEvidencia.Carpeta, false, TipoAcuse.NoAplica, mismaFecha));
+
+        Assert.Throws<DomainException>(() => solicitud.ActualizarDatos(
+            mismaFecha, new TimeOnly(10, 0), AreaIdValida, new string('x', 101), MedioEntrega.Digital,
+            EstatusEntrega.EnProceso, TipoSolicitud.Informacion, TipoEvidencia.Carpeta, false, TipoAcuse.NoAplica, mismaFecha));
+
+        Assert.Throws<DomainException>(() => solicitud.ActualizarDatos(
+            mismaFecha, new TimeOnly(10, 0), AreaIdValida, "   ", MedioEntrega.Digital,
+            EstatusEntrega.EnProceso, TipoSolicitud.Informacion, TipoEvidencia.Carpeta, false, TipoAcuse.NoAplica, mismaFecha));
+
+        Assert.Throws<DomainException>(() => solicitud.ActualizarDatos(
+            mismaFecha, new TimeOnly(10, 0), AreaIdValida, "Asunto\ncon control", MedioEntrega.Digital,
+            EstatusEntrega.EnProceso, TipoSolicitud.Informacion, TipoEvidencia.Carpeta, false, TipoAcuse.NoAplica, mismaFecha));
+
+        Assert.Throws<DomainException>(() => solicitud.ActualizarDatos(
+            mismaFecha, new TimeOnly(10, 0), AreaIdValida, "Asunto", (MedioEntrega)77,
+            EstatusEntrega.EnProceso, TipoSolicitud.Informacion, TipoEvidencia.Carpeta, false, TipoAcuse.NoAplica, mismaFecha));
+
+        Assert.Throws<DomainException>(() => solicitud.ActualizarDatos(
+            mismaFecha, new TimeOnly(10, 0), AreaIdValida, "Asunto", MedioEntrega.Digital,
+            EstatusEntrega.EnProceso, TipoSolicitud.Informacion, TipoEvidencia.Carpeta, true, TipoAcuse.NoAplica, mismaFecha));
+    }
+
+    [Fact]
+    public void ActualizarDatos_EsAtomicoEnMemoria_SiFallaUltimaValidacionNoMutaNingunaPropiedad()
+    {
+        var solicitud = CrearSolicitudValida(
+            fechaEntrega: new DateOnly(2026, 5, 10),
+            horaEntrega: new TimeOnly(14, 25),
+            areaId: AreaIdValida,
+            asunto: "Asunto inicial intacto",
+            medio: MedioEntrega.Digital,
+            estatus: EstatusEntrega.EnProceso,
+            tipoSolicitud: TipoSolicitud.Informacion,
+            tipoEvidencia: TipoEvidencia.Carpeta,
+            tieneAcuse: true,
+            tipoAcuse: TipoAcuse.Sello,
+            fechaVencimiento: new DateOnly(2026, 5, 20));
+
+        var areaCargada = AreaReceptora.Crear("Área Inicial", 1, true, AreaIdValida);
+        typeof(Solicitud).GetProperty(nameof(Solicitud.AreaReceptora))!
+            .SetValue(solicitud, areaCargada);
+
+        var otraAreaId = Guid.Parse("01950000-0000-7000-8000-000000000009");
+
+        // Todos los primeros campos son nuevos y válidos, pero falla la última regla (ValidarAcuse: false + Electronico)
+        Assert.Throws<DomainException>(() => solicitud.ActualizarDatos(
+            new DateOnly(2026, 8, 1),
+            new TimeOnly(9, 10),
+            otraAreaId,
+            "Asunto que NO debe aplicarse",
+            MedioEntrega.PortalWeb,
+            EstatusEntrega.Entregada,
+            TipoSolicitud.Aclaracion,
+            TipoEvidencia.Link,
+            tieneAcuse: false,
+            tipoAcuse: TipoAcuse.Electronico,
+            fechaVencimiento: new DateOnly(2026, 8, 15)));
+
+        Assert.Equal(new DateOnly(2026, 5, 10), solicitud.FechaEntrega);
+        Assert.Equal(new TimeOnly(14, 25), solicitud.HoraEntrega);
+        Assert.Equal(AreaIdValida, solicitud.AreaReceptoraId);
+        Assert.Same(areaCargada, solicitud.AreaReceptora);
+        Assert.Equal("Asunto inicial intacto", solicitud.Asunto);
+        Assert.Equal(MedioEntrega.Digital, solicitud.MedioEntrega);
+        Assert.Equal(EstatusEntrega.EnProceso, solicitud.EstatusEntrega);
+        Assert.Equal(TipoSolicitud.Informacion, solicitud.TipoSolicitud);
+        Assert.Equal(TipoEvidencia.Carpeta, solicitud.TipoEvidencia);
+        Assert.True(solicitud.TieneAcuse);
+        Assert.Equal(TipoAcuse.Sello, solicitud.TipoAcuse);
+        Assert.Equal(new DateOnly(2026, 5, 20), solicitud.FechaVencimiento);
+    }
 }

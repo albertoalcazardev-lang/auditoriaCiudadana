@@ -12,49 +12,27 @@ import type {
   SolicitudFieldName,
   SolicitudFormValues,
   SolicitudModalState,
+  SolicitudesCatalogos,
   SubmitStatus,
 } from '../types/solicitudes.types';
 import {
-  compareCalendarDates,
   computeDiasRestantesMexicoCity,
   getDiasRestantesTone,
   getMexicoCityNowParts,
-  isValidTime24h,
-  parseDdMmYyyy,
-  toIsoDateString,
 } from './solicitudesDateUtils';
+import {
+  CREATE_FIELD_ORDER,
+  CREATE_SERVER_FIELD_MAP,
+  applyTieneAcuseChange,
+  buildActualizarSolicitudPayload,
+  buildSolicitudConfirmacionResumen,
+  getSelectableEstatusEntrega,
+  getSelectableTiposAcuse,
+  mapValidationProblemDetails,
+  validateEditableSolicitudFields,
+} from './solicitudesFormUtils';
 
 const FOLIO_POLICY_REGEX = /^(?=.*[A-Za-z0-9])[A-Za-z0-9._/-]{1,100}$/;
-
-const FIELD_ORDER: readonly SolicitudFieldName[] = [
-  'folio',
-  'fechaEntrega',
-  'horaEntrega',
-  'areaReceptoraId',
-  'asunto',
-  'medioEntrega',
-  'estatusEntrega',
-  'tipoSolicitud',
-  'tipoEvidencia',
-  'tieneAcuse',
-  'tipoAcuse',
-  'fechaVencimiento',
-];
-
-const SERVER_FIELD_MAP: Record<string, SolicitudFieldName> = {
-  folio: 'folio',
-  fechaentrega: 'fechaEntrega',
-  horaentrega: 'horaEntrega',
-  areareceptoraid: 'areaReceptoraId',
-  asunto: 'asunto',
-  medioentrega: 'medioEntrega',
-  estatusentrega: 'estatusEntrega',
-  tiposolicitud: 'tipoSolicitud',
-  tipoevidencia: 'tipoEvidencia',
-  tieneacuse: 'tieneAcuse',
-  tipoacuse: 'tipoAcuse',
-  fechavencimiento: 'fechaVencimiento',
-};
 
 function createInitialFormValues(): SolicitudFormValues {
   const nowMx = getMexicoCityNowParts();
@@ -75,8 +53,13 @@ function createInitialFormValues(): SolicitudFormValues {
   };
 }
 
-export function validateSolicitudForm(values: SolicitudFormValues): SolicitudFieldErrors {
-  const errors: SolicitudFieldErrors = {};
+export function validateSolicitudForm(
+  values: SolicitudFormValues,
+  catalogos?: SolicitudesCatalogos,
+): SolicitudFieldErrors {
+  const errors: SolicitudFieldErrors = {
+    ...validateEditableSolicitudFields(values, catalogos),
+  };
 
   if (!values.generarFolioAutomatico) {
     const trimmedFolio = values.folio.trim();
@@ -90,80 +73,7 @@ export function validateSolicitudForm(values: SolicitudFormValues): SolicitudFie
     }
   }
 
-  const parsedEntrega = parseDdMmYyyy(values.fechaEntrega);
-  if (!values.fechaEntrega.trim()) {
-    errors.fechaEntrega = 'Ingresa la fecha de entrega.';
-  } else if (!parsedEntrega) {
-    errors.fechaEntrega = 'Ingresa una fecha válida con formato dd/mm/aaaa.';
-  }
-
-  if (!values.horaEntrega.trim()) {
-    errors.horaEntrega = 'Ingresa la hora de entrega.';
-  } else if (!isValidTime24h(values.horaEntrega)) {
-    errors.horaEntrega = 'Ingresa una hora válida en formato 24 h (HH:mm).';
-  }
-
-  if (!values.areaReceptoraId) {
-    errors.areaReceptoraId = 'Selecciona el área o dependencia receptora.';
-  }
-
-  if (!values.asunto.trim()) {
-    errors.asunto = 'Ingresa el asunto corto de la solicitud.';
-  } else if (values.asunto.length > 100) {
-    errors.asunto = 'El asunto corto no puede exceder 100 caracteres.';
-  }
-
-  if (!values.medioEntrega) {
-    errors.medioEntrega = 'Selecciona el medio de entrega.';
-  }
-
-  if (!values.estatusEntrega || values.estatusEntrega === 'Vencida') {
-    errors.estatusEntrega = 'Selecciona el estatus de entrega.';
-  }
-
-  if (!values.tipoSolicitud) {
-    errors.tipoSolicitud = 'Selecciona el tipo de solicitud.';
-  }
-
-  if (!values.tipoEvidencia) {
-    errors.tipoEvidencia = 'Selecciona el tipo de evidencia.';
-  }
-
-  if (values.tieneAcuse !== 'si' && values.tieneAcuse !== 'no') {
-    errors.tieneAcuse = 'Indica si cuenta con acuse.';
-  }
-
-  if (values.tieneAcuse === 'si' && (!values.tipoAcuse || values.tipoAcuse === 'NoAplica')) {
-    errors.tipoAcuse = 'Selecciona un tipo de acuse válido.';
-  }
-
-  const parsedVencimiento = parseDdMmYyyy(values.fechaVencimiento);
-  if (!values.fechaVencimiento.trim()) {
-    errors.fechaVencimiento = 'Ingresa el plazo de vencimiento.';
-  } else if (!parsedVencimiento) {
-    errors.fechaVencimiento = 'Ingresa una fecha válida con formato dd/mm/aaaa.';
-  } else if (parsedEntrega && compareCalendarDates(parsedVencimiento, parsedEntrega) < 0) {
-    errors.fechaVencimiento = 'El plazo de vencimiento no puede ser anterior a la fecha de entrega.';
-  }
-
   return errors;
-}
-
-function mapValidationProblemDetails(details: unknown): SolicitudFieldErrors {
-  if (!details || typeof details !== 'object') return {};
-  const maybeErrors = (details as { errors?: unknown }).errors;
-  if (!maybeErrors || typeof maybeErrors !== 'object') return {};
-
-  const mapped: SolicitudFieldErrors = {};
-  for (const [rawKey, rawMessages] of Object.entries(maybeErrors as Record<string, unknown>)) {
-    const normalized = rawKey.trim().replace(/^\$\./, '').toLowerCase();
-    const fieldName = SERVER_FIELD_MAP[normalized];
-    if (!fieldName) continue;
-    if (Array.isArray(rawMessages) && typeof rawMessages[0] === 'string' && rawMessages[0].trim()) {
-      mapped[fieldName] = rawMessages[0];
-    }
-  }
-  return mapped;
 }
 
 const UNCERTAIN_SUBMISSION_STORAGE_KEY = 'vyt.solicitudes.uncertainSubmission';
@@ -282,6 +192,10 @@ export function useNuevaSolicitudViewModel(userId: string) {
   );
   const [modalState, setModalState] = useState<SolicitudModalState>('none');
   const [confirmacion, setConfirmacion] = useState<SolicitudConfirmacionResumen | null>(null);
+  const [focusRequest, setFocusRequest] = useState<{
+    field: SolicitudFieldName;
+    seq: number;
+  } | null>(null);
 
   const pendingSubmissionRef = useRef<PendingSubmissionRecord | null>(initialBootstrap.restored);
   const allowExitRef = useRef(false);
@@ -324,21 +238,14 @@ export function useNuevaSolicitudViewModel(userId: string) {
   });
 
   const selectableEstatusEntrega = useMemo(
-    () => (catalogosQuery.data?.estatusEntrega ?? []).filter((item) => item.codigo !== 'Vencida'),
-    [catalogosQuery.data?.estatusEntrega],
+    () => getSelectableEstatusEntrega(catalogosQuery.data),
+    [catalogosQuery.data],
   );
 
-  const selectableTiposAcuse = useMemo(() => {
-    const raw = catalogosQuery.data?.tiposAcuse ?? [];
-    if (values.tieneAcuse === 'no') {
-      const hasNoAplica = raw.some((item) => item.codigo === 'NoAplica');
-      return hasNoAplica ? raw : [...raw, { codigo: 'NoAplica', nombre: 'No aplica' }];
-    }
-    if (values.tieneAcuse === 'si') {
-      return raw.filter((item) => item.codigo !== 'NoAplica');
-    }
-    return [];
-  }, [catalogosQuery.data?.tiposAcuse, values.tieneAcuse]);
+  const selectableTiposAcuse = useMemo(
+    () => getSelectableTiposAcuse(catalogosQuery.data, values.tieneAcuse),
+    [catalogosQuery.data, values.tieneAcuse],
+  );
 
   const diasRestantes = useMemo(
     () => computeDiasRestantesMexicoCity(values.fechaVencimiento),
@@ -347,11 +254,14 @@ export function useNuevaSolicitudViewModel(userId: string) {
 
   const diasRestantesTone = useMemo(() => getDiasRestantesTone(diasRestantes), [diasRestantes]);
 
-  const validationErrors = useMemo(() => validateSolicitudForm(values), [values]);
+  const validationErrors = useMemo(
+    () => validateSolicitudForm(values, catalogosQuery.data),
+    [catalogosQuery.data, values],
+  );
 
   const visibleErrors: SolicitudFieldErrors = useMemo(() => {
     const result: SolicitudFieldErrors = {};
-    for (const field of FIELD_ORDER) {
+    for (const field of CREATE_FIELD_ORDER) {
       const serverErr = serverFieldErrors[field];
       if (serverErr) {
         result[field] = serverErr;
@@ -375,7 +285,7 @@ export function useNuevaSolicitudViewModel(userId: string) {
   ]);
 
   const invalidCount = useMemo(
-    () => FIELD_ORDER.filter((field) => Boolean(visibleErrors[field])).length,
+    () => CREATE_FIELD_ORDER.filter((field) => Boolean(visibleErrors[field])).length,
     [visibleErrors],
   );
 
@@ -422,10 +332,13 @@ export function useNuevaSolicitudViewModel(userId: string) {
   );
 
   const focusField = useCallback((field: SolicitudFieldName) => {
-    requestAnimationFrame(() => {
-      fieldRefs.current[field]?.focus();
-    });
+    setFocusRequest((prev) => ({ field, seq: (prev?.seq ?? 0) + 1 }));
   }, []);
+
+  useEffect(() => {
+    if (!focusRequest || isFormLocked) return;
+    fieldRefs.current[focusRequest.field]?.focus();
+  }, [focusRequest, isFormLocked]);
 
   const clearServerFieldError = useCallback((field: SolicitudFieldName) => {
     setServerBannerError(null);
@@ -481,90 +394,24 @@ export function useNuevaSolicitudViewModel(userId: string) {
       if (isFormLocked) return;
       clearServerFieldError('tieneAcuse');
       clearServerFieldError('tipoAcuse');
-      setFormState((prev) => {
-        if (nextValue === 'no') {
-          return {
-            ...prev,
-            values: { ...prev.values, tieneAcuse: 'no', tipoAcuse: 'NoAplica' },
-          };
-        }
-        if (nextValue === 'si') {
-          return {
-            ...prev,
-            values: {
-              ...prev.values,
-              tieneAcuse: 'si',
-              tipoAcuse: prev.values.tipoAcuse === 'NoAplica' ? '' : prev.values.tipoAcuse,
-            },
-          };
-        }
-        return {
-          ...prev,
-          values: { ...prev.values, tieneAcuse: '', tipoAcuse: '' },
-        };
-      });
+      setFormState((prev) => ({
+        ...prev,
+        values: applyTieneAcuseChange(prev.values, nextValue),
+      }));
     },
     [clearServerFieldError, isFormLocked],
   );
 
   const buildPayload = useCallback((): CrearSolicitudPayload | null => {
-    const parsedEntrega = parseDdMmYyyy(values.fechaEntrega);
-    const parsedVencimiento = parseDdMmYyyy(values.fechaVencimiento);
-    if (!parsedEntrega || !parsedVencimiento) return null;
+    const editablePayload = buildActualizarSolicitudPayload(values);
+    if (!editablePayload) return null;
 
     return {
       generarFolioAutomatico: values.generarFolioAutomatico,
       folio: values.generarFolioAutomatico ? null : values.folio.trim(),
-      fechaEntrega: toIsoDateString(parsedEntrega),
-      horaEntrega: values.horaEntrega.trim(),
-      areaReceptoraId: values.areaReceptoraId,
-      asunto: values.asunto.trim(),
-      medioEntrega: values.medioEntrega,
-      estatusEntrega: values.estatusEntrega,
-      tipoSolicitud: values.tipoSolicitud,
-      tipoEvidencia: values.tipoEvidencia,
-      tieneAcuse: values.tieneAcuse === 'si',
-      tipoAcuse: values.tieneAcuse === 'no' ? 'NoAplica' : values.tipoAcuse,
-      fechaVencimiento: toIsoDateString(parsedVencimiento),
+      ...editablePayload,
     };
   }, [values]);
-
-  const buildConfirmacionResumen = useCallback(
-    (resultado: SolicitudConfirmacionResumen['resultado']): SolicitudConfirmacionResumen => {
-      const catalogos = catalogosQuery.data;
-      const areaNombre =
-        catalogos?.areasReceptoras.find((a) => a.id === values.areaReceptoraId)?.nombre ??
-        values.areaReceptoraId;
-      const medioNombre =
-        catalogos?.mediosEntrega.find((m) => m.codigo === values.medioEntrega)?.nombre ??
-        values.medioEntrega;
-      const tipoNombre =
-        catalogos?.tiposSolicitud.find((t) => t.codigo === values.tipoSolicitud)?.nombre ??
-        values.tipoSolicitud;
-      const evidenciaNombre =
-        catalogos?.tiposEvidencia.find((e) => e.codigo === values.tipoEvidencia)?.nombre ??
-        values.tipoEvidencia;
-      const tipoAcuseNombre =
-        values.tieneAcuse === 'no'
-          ? 'No aplica'
-          : (catalogos?.tiposAcuse.find((a) => a.codigo === values.tipoAcuse)?.nombre ??
-            values.tipoAcuse);
-
-      return {
-        resultado,
-        areaReceptoraNombre: areaNombre,
-        asunto: values.asunto.trim(),
-        fechaEntrega: values.fechaEntrega.trim(),
-        horaEntrega: values.horaEntrega.trim(),
-        medioEntregaNombre: medioNombre,
-        tipoSolicitudNombre: tipoNombre,
-        tipoEvidenciaNombre: evidenciaNombre,
-        tieneAcuseTexto: values.tieneAcuse === 'si' ? 'Sí' : 'No',
-        tipoAcuseNombre,
-      };
-    },
-    [catalogosQuery.data, values],
-  );
 
   const executeSubmission = useCallback(
     async (record: PendingSubmissionRecord) => {
@@ -577,7 +424,9 @@ export function useNuevaSolicitudViewModel(userId: string) {
         const resultado = await crearSolicitud(record.payload, record.idempotencyKey);
         clearUncertainSubmission();
         pendingSubmissionRef.current = null;
-        setConfirmacion(buildConfirmacionResumen(resultado));
+        setConfirmacion(
+          buildSolicitudConfirmacionResumen(resultado, record.values, catalogosQuery.data),
+        );
         setSubmitStatus('succeeded');
       } catch (error) {
         if (error instanceof HttpClientError) {
@@ -615,10 +464,10 @@ export function useNuevaSolicitudViewModel(userId: string) {
             clearUncertainSubmission();
             pendingSubmissionRef.current = null;
             setSubmitStatus('idle');
-            const mapped = mapValidationProblemDetails(error.details);
+            const mapped = mapValidationProblemDetails(error.details, CREATE_SERVER_FIELD_MAP);
             if (Object.keys(mapped).length > 0) {
               setServerFieldErrors(mapped);
-              const firstServerField = FIELD_ORDER.find((field) => Boolean(mapped[field]));
+              const firstServerField = CREATE_FIELD_ORDER.find((field) => Boolean(mapped[field]));
               if (firstServerField) focusField(firstServerField);
             } else {
               setServerBannerError(
@@ -672,7 +521,7 @@ export function useNuevaSolicitudViewModel(userId: string) {
         setSubmitStatus('uncertain');
       }
     },
-    [buildConfirmacionResumen, focusField, queryClient],
+    [catalogosQuery.data, focusField, queryClient],
   );
 
   const requestSubmit = useCallback(() => {
@@ -682,8 +531,8 @@ export function useNuevaSolicitudViewModel(userId: string) {
     setServerBannerError(null);
     setServerFieldErrors({});
 
-    const currentErrors = validateSolicitudForm(values);
-    const firstInvalid = FIELD_ORDER.find((field) => Boolean(currentErrors[field]));
+    const currentErrors = validateSolicitudForm(values, catalogosQuery.data);
+    const firstInvalid = CREATE_FIELD_ORDER.find((field) => Boolean(currentErrors[field]));
 
     if (firstInvalid) {
       focusField(firstInvalid);
@@ -692,7 +541,14 @@ export function useNuevaSolicitudViewModel(userId: string) {
 
     setSubmitStatus('confirming');
     setModalState('confirm-register');
-  }, [catalogosQuery.isError, catalogosQuery.isPending, focusField, isFormLocked, values]);
+  }, [
+    catalogosQuery.data,
+    catalogosQuery.isError,
+    catalogosQuery.isPending,
+    focusField,
+    isFormLocked,
+    values,
+  ]);
 
   const confirmRegister = useCallback(() => {
     if (submitStatus === 'submitting' || submitStatus === 'uncertain') return;
@@ -728,7 +584,11 @@ export function useNuevaSolicitudViewModel(userId: string) {
     const storedRecord = readUncertainSubmission();
     const record = currentRecord ?? (storedRecord?.ownerUserId === userId ? storedRecord : null);
 
-    if (!record || record.ownerUserId !== userId || (storedRecord && storedRecord.ownerUserId !== userId)) {
+    if (
+      !record ||
+      record.ownerUserId !== userId ||
+      (storedRecord && storedRecord.ownerUserId !== userId)
+    ) {
       clearUncertainSubmission();
       pendingSubmissionRef.current = null;
       setSubmitStatus('idle');
@@ -777,6 +637,14 @@ export function useNuevaSolicitudViewModel(userId: string) {
     navigate('/admin/dashboard');
   }, [navigate]);
 
+  const irAEditarSolicitud = useCallback(() => {
+    const folio = confirmacion?.resultado.folio;
+    if (!folio) return;
+    allowExitRef.current = true;
+    setModalState('none');
+    navigate(`/admin/solicitudes/${encodeURIComponent(folio)}/editar`);
+  }, [confirmacion?.resultado.folio, navigate]);
+
   const resetFormulario = useCallback(() => {
     const freshDefaults = createInitialFormValues();
     clearUncertainSubmission();
@@ -823,6 +691,7 @@ export function useNuevaSolicitudViewModel(userId: string) {
     requestExitToDashboard,
     closeDiscardModal,
     confirmExitToDashboard,
+    irAEditarSolicitud,
     resetFormulario,
   };
 }

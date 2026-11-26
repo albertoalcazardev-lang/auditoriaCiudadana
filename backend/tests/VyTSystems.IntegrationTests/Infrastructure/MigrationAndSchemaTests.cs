@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -8,8 +9,11 @@ using VyTSystems.IntegrationTests.Fixtures;
 namespace VyTSystems.IntegrationTests.Infrastructure;
 
 [Collection(MySqlIntegrationCollection.Name)]
-public sealed class MigrationAndSchemaTests(MySqlTestFixture fixture)
+public sealed partial class MigrationAndSchemaTests(MySqlTestFixture fixture)
 {
+    [GeneratedRegex(@"^[0-9a-f]{32}$", RegexOptions.CultureInvariant)]
+    private static partial Regex LowerHex32Regex();
+
     [Fact]
     public async Task MigrateDownYUp_EnBaseAislada_AplicaYRevierteEsquemaCon10AreasSemilla()
     {
@@ -53,6 +57,84 @@ public sealed class MigrationAndSchemaTests(MySqlTestFixture fixture)
     }
 
     [Fact]
+    public async Task MigracionIncrementalConcurrencyToken_ConFilasHistoricasPrevias_BackfilleaYPermiteDownYUp()
+    {
+        var password = $"MigHist_{Guid.NewGuid():N}!9a";
+        await using var container = new MySqlBuilder("mysql:8.4")
+            .WithDatabase($"vyt_mighist_{Guid.NewGuid():N}")
+            .WithUsername("vyt_mig")
+            .WithPassword(password)
+            .Build();
+
+        await container.StartAsync();
+        var connStr = container.GetConnectionString();
+
+        await using var db = fixture.CreateDbContext(connStr);
+        var migrator = db.GetService<IMigrator>();
+
+        // 1. Migrar únicamente hasta Task 02 (antes de que exista concurrency_token)
+        await migrator.MigrateAsync("20261126060345_AddSolicitudesYAreasReceptoras");
+
+        var columnasPre = await ObtenerColumnasTablaAsync(connStr, "solicitudes");
+        Assert.DoesNotContain("concurrency_token", columnasPre, StringComparer.OrdinalIgnoreCase);
+
+        var userId = Guid.CreateVersion7().ToString();
+        var areaId = Guid.Parse("01950000-0000-7000-8000-000000000001");
+        var sol1Id = Guid.CreateVersion7();
+        var sol2Id = Guid.CreateVersion7();
+
+        await db.Database.ExecuteSqlInterpolatedAsync($@"
+            INSERT INTO AspNetUsers
+                (Id, UserName, NormalizedUserName, Email, NormalizedEmail, EmailConfirmed,
+                 PhoneNumberConfirmed, TwoFactorEnabled, LockoutEnabled, AccessFailedCount)
+            VALUES
+                ({userId}, 'hist_admin', 'HIST_ADMIN', 'hist@vyt.test', 'HIST@VYT.TEST', 1, 0, 0, 1, 0);");
+
+        await db.Database.ExecuteSqlInterpolatedAsync($@"
+            INSERT INTO solicitudes
+                (id, folio, folio_normalizado, es_folio_automatico, fecha_entrega, hora_entrega,
+                 area_receptora_id, asunto, medio_entrega, estatus_entrega, tipo_solicitud,
+                 tipo_evidencia, tiene_acuse, tipo_acuse, fecha_vencimiento, creado_por_usuario_id,
+                 creado_en_utc, idempotency_key, idempotency_payload_hash)
+            VALUES
+                ({sol1Id}, 'HIST-001', 'HIST-001', 0, '2026-05-01', '09:00:00',
+                 {areaId}, 'Histórica uno', 'Digital', 'EnProceso', 'Informacion',
+                 'Carpeta', 0, 'NoAplica', '2026-05-15', {userId},
+                 '2026-05-01 15:00:00', 'idem-hist-1', {new string('1', 64)}),
+                ({sol2Id}, 'HIST-002', 'HIST-002', 0, '2026-05-02', '10:30:00',
+                 {areaId}, 'Histórica dos', 'Impreso', 'Entregada', 'Aclaracion',
+                 'Link', 1, 'Sello', '2026-05-20', {userId},
+                 '2026-05-02 16:30:00', 'idem-hist-2', {new string('2', 64)});");
+
+        // 2. Aplicar AddSolicitudConcurrencyToken sobre tabla poblada
+        await migrator.MigrateAsync();
+        Assert.False(db.Database.HasPendingModelChanges());
+
+        var tokens = await db.Database
+            .SqlQueryRaw<string>("SELECT concurrency_token AS Value FROM solicitudes ORDER BY folio")
+            .ToListAsync();
+
+        Assert.Equal(2, tokens.Count);
+        Assert.All(tokens, t => Assert.Matches(LowerHex32Regex(), t));
+        Assert.NotEqual(tokens[0], tokens[1]);
+
+        // 3. Revertir AddSolicitudConcurrencyToken (Down) y verificar preservación de filas históricas
+        await migrator.MigrateAsync("20261126060345_AddSolicitudesYAreasReceptoras");
+        var columnasTrasDown = await ObtenerColumnasTablaAsync(connStr, "solicitudes");
+        Assert.DoesNotContain("concurrency_token", columnasTrasDown, StringComparer.OrdinalIgnoreCase);
+
+        var conteoTrasDown = await db.Database
+            .SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM solicitudes")
+            .SingleAsync();
+        Assert.Equal(2, conteoTrasDown);
+
+        // 4. Volver a aplicar Up
+        await migrator.MigrateAsync();
+        Assert.False(db.Database.HasPendingModelChanges());
+        Assert.Equal(2, await db.Solicitudes.CountAsync());
+    }
+
+    [Fact]
     public async Task MySqlConstraints_CheckUniqueYForeignKeyRestrict_AplicanEnBaseReal()
     {
         await fixture.ResetSolicitudesAsync();
@@ -61,6 +143,8 @@ public sealed class MigrationAndSchemaTests(MySqlTestFixture fixture)
         var areaId = Guid.Parse("01950000-0000-7000-8000-000000000001");
         var id1 = Guid.CreateVersion7();
         var id2 = Guid.CreateVersion7();
+        var id3 = Guid.CreateVersion7();
+        const string tokenValido = "0123456789abcdef0123456789abcdef";
 
         // CHECK constraint: fecha_vencimiento < fecha_entrega debe fallar con error 3819
         var exCheck = await Assert.ThrowsAsync<MySqlException>(() =>
@@ -69,12 +153,12 @@ public sealed class MigrationAndSchemaTests(MySqlTestFixture fixture)
                     (id, folio, folio_normalizado, es_folio_automatico, fecha_entrega, hora_entrega,
                      area_receptora_id, asunto, medio_entrega, estatus_entrega, tipo_solicitud,
                      tipo_evidencia, tiene_acuse, tipo_acuse, fecha_vencimiento, creado_por_usuario_id,
-                     creado_en_utc, idempotency_key, idempotency_payload_hash)
+                     creado_en_utc, idempotency_key, idempotency_payload_hash, concurrency_token)
                 VALUES
                     ({id1}, 'CHK-001', 'CHK-001', 0, '2026-05-10', '10:00:00',
                      {areaId}, 'Asunto válido', 'Digital', 'EnProceso', 'Informacion',
                      'Carpeta', 0, 'NoAplica', '2026-05-09', {fixture.AdminUserId},
-                     '2026-05-10 10:00:00', 'k-chk-1', {new string('a', 64)});"));
+                     '2026-05-10 10:00:00', 'k-chk-1', {new string('a', 64)}, {tokenValido});"));
         Assert.Equal(3819, exCheck.Number);
 
         // CHECK constraint: estatus_entrega = 'Vencida' debe fallar con error 3819
@@ -84,13 +168,31 @@ public sealed class MigrationAndSchemaTests(MySqlTestFixture fixture)
                     (id, folio, folio_normalizado, es_folio_automatico, fecha_entrega, hora_entrega,
                      area_receptora_id, asunto, medio_entrega, estatus_entrega, tipo_solicitud,
                      tipo_evidencia, tiene_acuse, tipo_acuse, fecha_vencimiento, creado_por_usuario_id,
-                     creado_en_utc, idempotency_key, idempotency_payload_hash)
+                     creado_en_utc, idempotency_key, idempotency_payload_hash, concurrency_token)
                 VALUES
                     ({id2}, 'CHK-002', 'CHK-002', 0, '2026-05-10', '10:00:00',
                      {areaId}, 'Asunto válido', 'Digital', 'Vencida', 'Informacion',
                      'Carpeta', 0, 'NoAplica', '2026-05-15', {fixture.AdminUserId},
-                     '2026-05-10 10:00:00', 'k-chk-2', {new string('b', 64)});"));
+                     '2026-05-10 10:00:00', 'k-chk-2', {new string('b', 64)}, {tokenValido});"));
         Assert.Equal(3819, exEstatus.Number);
+
+        // CHECK constraint: concurrency_token inválido (corto, mayúsculas o no-hex) debe fallar con error 3819
+        foreach (var tokenInvalido in new[] { "corto", "0123456789ABCDEF0123456789abcdef", new string('g', 32) })
+        {
+            var exToken = await Assert.ThrowsAsync<MySqlException>(() =>
+                db.Database.ExecuteSqlInterpolatedAsync($@"
+                    INSERT INTO solicitudes
+                        (id, folio, folio_normalizado, es_folio_automatico, fecha_entrega, hora_entrega,
+                         area_receptora_id, asunto, medio_entrega, estatus_entrega, tipo_solicitud,
+                         tipo_evidencia, tiene_acuse, tipo_acuse, fecha_vencimiento, creado_por_usuario_id,
+                         creado_en_utc, idempotency_key, idempotency_payload_hash, concurrency_token)
+                    VALUES
+                        ({id3}, 'CHK-TOK', 'CHK-TOK', 0, '2026-05-10', '10:00:00',
+                         {areaId}, 'Asunto válido', 'Digital', 'EnProceso', 'Informacion',
+                         'Carpeta', 0, 'NoAplica', '2026-05-15', {fixture.AdminUserId},
+                         '2026-05-10 10:00:00', 'k-chk-tok', {new string('d', 64)}, {tokenInvalido});"));
+            Assert.Equal(3819, exToken.Number);
+        }
 
         // Inserción válida + intento de borrar área receptora referenciada debe fallar por ON DELETE RESTRICT (1451)
         await db.Database.ExecuteSqlInterpolatedAsync($@"
@@ -98,12 +200,12 @@ public sealed class MigrationAndSchemaTests(MySqlTestFixture fixture)
                 (id, folio, folio_normalizado, es_folio_automatico, fecha_entrega, hora_entrega,
                  area_receptora_id, asunto, medio_entrega, estatus_entrega, tipo_solicitud,
                  tipo_evidencia, tiene_acuse, tipo_acuse, fecha_vencimiento, creado_por_usuario_id,
-                 creado_en_utc, idempotency_key, idempotency_payload_hash)
+                 creado_en_utc, idempotency_key, idempotency_payload_hash, concurrency_token)
             VALUES
                 ({id1}, 'FK-001', 'FK-001', 0, '2026-05-10', '10:00:00',
                  {areaId}, 'Asunto válido', 'Digital', 'EnProceso', 'Informacion',
                  'Carpeta', 0, 'NoAplica', '2026-05-15', {fixture.AdminUserId},
-                 '2026-05-10 10:00:00', 'k-fk-1', {new string('c', 64)});");
+                 '2026-05-10 10:00:00', 'k-fk-1', {new string('c', 64)}, {tokenValido});");
 
         var exFkRestrict = await Assert.ThrowsAsync<MySqlException>(() =>
             db.Database.ExecuteSqlInterpolatedAsync($@"DELETE FROM areas_receptoras WHERE id = {areaId};"));
@@ -124,5 +226,21 @@ public sealed class MigrationAndSchemaTests(MySqlTestFixture fixture)
         }
 
         return tables;
+    }
+
+    private static async Task<HashSet<string>> ObtenerColumnasTablaAsync(string connectionString, string tableName)
+    {
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var connection = new MySqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SHOW COLUMNS FROM `{tableName}`;";
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            columns.Add(reader.GetString(0));
+        }
+
+        return columns;
     }
 }

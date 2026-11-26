@@ -59,6 +59,36 @@ builder.Services.AddOpenApi(options =>
             }
         }
 
+        if (string.Equals(context.Description.RelativePath, "api/solicitudes/{id}", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(context.Description.HttpMethod, "PUT", StringComparison.OrdinalIgnoreCase))
+        {
+            operation.Parameters ??= [];
+            var existente = operation.Parameters.FirstOrDefault(p =>
+                string.Equals(p.Name, "If-Match", StringComparison.OrdinalIgnoreCase) &&
+                p.In == ParameterLocation.Header);
+
+            if (existente is OpenApiParameter parametro)
+            {
+                parametro.Required = true;
+                parametro.Description = "ETag fuerte vigente de la solicitud entre comillas dobles (RFC 9110).";
+            }
+            else if (existente is null)
+            {
+                operation.Parameters.Add(new OpenApiParameter
+                {
+                    Name = "If-Match",
+                    In = ParameterLocation.Header,
+                    Required = true,
+                    Description = "ETag fuerte vigente de la solicitud entre comillas dobles (RFC 9110).",
+                    Schema = new OpenApiSchema
+                    {
+                        Type = JsonSchemaType.String,
+                        Pattern = "^\"[\\x21\\x23-\\x7E]{1,128}\"$"
+                    }
+                });
+            }
+        }
+
         return Task.CompletedTask;
     });
 });

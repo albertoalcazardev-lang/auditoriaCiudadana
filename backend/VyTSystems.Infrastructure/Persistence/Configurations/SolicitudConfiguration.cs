@@ -51,6 +51,9 @@ internal sealed class SolicitudConfiguration : IEntityTypeConfiguration<Solicitu
             table.HasCheckConstraint(
                 "CK_solicitudes_acuse_coherente",
                 "(tiene_acuse = 0 AND tipo_acuse = 'NoAplica') OR (tiene_acuse = 1 AND tipo_acuse <> 'NoAplica')");
+            table.HasCheckConstraint(
+                "CK_solicitudes_concurrency_token_formato",
+                "CHAR_LENGTH(concurrency_token) = 32 AND REGEXP_LIKE(concurrency_token, '^[0-9a-f]{32}$', 'c')");
         });
 
         builder.HasKey(x => x.Id);
@@ -181,6 +184,15 @@ internal sealed class SolicitudConfiguration : IEntityTypeConfiguration<Solicitu
             .HasMaxLength(64)
             .IsFixedLength()
             .IsRequired()
+            .ForMySQLHasCollation("utf8mb4_0900_as_cs");
+
+        builder.Property<string>("ConcurrencyToken")
+            .HasColumnName("concurrency_token")
+            .HasColumnType("char(32)")
+            .HasMaxLength(32)
+            .IsFixedLength()
+            .IsRequired()
+            .IsConcurrencyToken()
             .ForMySQLHasCollation("utf8mb4_0900_as_cs");
 
         builder.HasIndex(x => x.FolioNormalizado)

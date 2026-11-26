@@ -3,6 +3,7 @@ using MediatR;
 using VyTSystems.Application.Abstractions.Persistence;
 using VyTSystems.Application.Common.Results;
 using VyTSystems.Application.Common.Validation;
+using VyTSystems.Application.Solicitudes.Common;
 using VyTSystems.Domain.Entities;
 using VyTSystems.Domain.Enums;
 
@@ -17,8 +18,6 @@ public sealed class CrearSolicitudHandler(
     TimeProvider timeProvider)
     : IRequestHandler<CrearSolicitudCommand, Result<CrearSolicitudResult>>
 {
-    private static readonly TimeZoneInfo MexicoTimeZone = ResolverZonaHorariaMexico();
-
     public async Task<Result<CrearSolicitudResult>> Handle(
         CrearSolicitudCommand request,
         CancellationToken cancellationToken)
@@ -37,9 +36,7 @@ public sealed class CrearSolicitudHandler(
         var asunto = request.Asunto!.Trim();
         var tieneAcuse = request.TieneAcuse!.Value;
 
-        var ahoraUtc = timeProvider.GetUtcNow().UtcDateTime;
-        var ahoraCdmx = TimeZoneInfo.ConvertTimeFromUtc(ahoraUtc, MexicoTimeZone);
-        var hoy = DateOnly.FromDateTime(ahoraCdmx);
+        var (ahoraUtc, hoy) = SolicitudZonaHoraria.ObtenerAhoraYHoyMexico(timeProvider);
         var anioActual = hoy.Year;
 
         var payloadHash = SolicitudIdempotencyHasher.CalcularHash(
@@ -116,15 +113,5 @@ public sealed class CrearSolicitudHandler(
         };
 
         return Result.Success(new CrearSolicitudResult(dto, fueRecuperadaPorIdempotencia));
-    }
-
-    private static TimeZoneInfo ResolverZonaHorariaMexico()
-    {
-        if (TimeZoneInfo.TryFindSystemTimeZoneById("America/Mexico_City", out var ianaZone))
-        {
-            return ianaZone;
-        }
-
-        return TimeZoneInfo.FindSystemTimeZoneById("Central Standard Time (Mexico)");
     }
 }

@@ -48,6 +48,8 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IAreaReceptoraReadRepository, AreaReceptoraReadRepository>();
         services.AddScoped<ISolicitudRegistroPersistence, SolicitudRegistroPersistence>();
+        services.AddScoped<ISolicitudEdicionReadRepository, SolicitudEdicionReadRepository>();
+        services.AddScoped<ISolicitudEdicionPersistence, SolicitudEdicionPersistence>();
         services.AddScoped<DatabaseInitializer>();
 
         return services;

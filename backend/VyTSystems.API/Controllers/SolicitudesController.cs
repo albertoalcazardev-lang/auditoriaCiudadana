@@ -27,6 +27,27 @@ public sealed class SolicitudesController(ISender sender, IAuthenticatedSessionS
         return this.ToActionResult(result, dto => dto.ToResponse());
     }
 
+    [HttpGet("edicion")]
+    [ProducesResponseType<SolicitudEdicionResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> ObtenerParaEdicion(
+        [FromQuery] string? folio,
+        CancellationToken cancellationToken)
+    {
+        var folioValues = Request.Query["folio"];
+        var query = SolicitudesContractMappings.ToEdicionQuery(folio, folioValues.Count);
+        var result = await sender.Send(query, cancellationToken);
+        return this.ToActionResultWithETag(
+            result,
+            r => r.Solicitud.ToEdicionResponse(),
+            r => SolicitudesContractMappings.FormatStrongETag(r.VersionConcurrencia));
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     [ProducesResponseType<CrearSolicitudResponse>(StatusCodes.Status201Created)]
@@ -54,5 +75,34 @@ public sealed class SolicitudesController(ISender sender, IAuthenticatedSessionS
             result,
             r => r.Solicitud.ToResponse(),
             r => r.FueRecuperadaPorIdempotencia);
+    }
+
+    [HttpPut("{id}")]
+    [ValidateAntiForgeryToken]
+    [ProducesResponseType<SolicitudEdicionResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> Actualizar(
+        [FromRoute] string? id,
+        [FromBody] ActualizarSolicitudRequest request,
+        CancellationToken cancellationToken)
+    {
+        var session = sessions.GetCurrentSession();
+        if (session is null)
+        {
+            return this.UnauthorizedProblem();
+        }
+
+        var command = request.ToCommand(session.UserId, id, Request.Headers.IfMatch);
+        var result = await sender.Send(command, cancellationToken);
+        return this.ToActionResultWithETag(
+            result,
+            r => r.Solicitud.ToEdicionResponse(),
+            r => SolicitudesContractMappings.FormatStrongETag(r.VersionConcurrencia));
     }
 }

@@ -77,7 +77,7 @@ public sealed partial class Solicitud : Entity<Guid>
     }
 
     /// <summary>
-    /// Crea una nueva instancia válida e inmutable de <see cref="Solicitud"/>.
+    /// Crea una nueva instancia válida de <see cref="Solicitud"/>.
     /// </summary>
     public static Solicitud Crear(
         string folio,
@@ -101,16 +101,19 @@ public sealed partial class Solicitud : Entity<Guid>
             throw new DomainException(errorFolio!);
         }
 
-        ValidarPlazo(fechaEntrega, fechaVencimiento);
+        var (asuntoLimpio, horaNormalizada) = ValidarYPrepararDatosEditables(
+            fechaEntrega,
+            horaEntrega,
+            areaReceptoraId,
+            asunto,
+            medioEntrega,
+            estatusEntrega,
+            tipoSolicitud,
+            tipoEvidencia,
+            tieneAcuse,
+            tipoAcuse,
+            fechaVencimiento);
 
-        if (areaReceptoraId == Guid.Empty)
-        {
-            throw new DomainException("El área receptora es obligatoria.");
-        }
-
-        var asuntoLimpio = ValidarYLimpiarAsunto(asunto);
-        ValidarEnums(medioEntrega, estatusEntrega, tipoSolicitud, tipoEvidencia, tipoAcuse);
-        ValidarAcuse(tieneAcuse, tipoAcuse);
         var usuarioIdLimpio = ValidarAuditoria(creadoPorUsuarioId, creadoEnUtc);
 
         return new Solicitud(
@@ -119,7 +122,7 @@ public sealed partial class Solicitud : Entity<Guid>
             folioLimpio.ToUpperInvariant(),
             esFolioAutomatico,
             fechaEntrega,
-            new TimeOnly(horaEntrega.Hour, horaEntrega.Minute),
+            horaNormalizada,
             areaReceptoraId,
             asuntoLimpio,
             medioEntrega,
@@ -131,6 +134,53 @@ public sealed partial class Solicitud : Entity<Guid>
             fechaVencimiento,
             usuarioIdLimpio,
             creadoEnUtc);
+    }
+
+    /// <summary>
+    /// Actualiza de forma atómica los datos editables de la solicitud preservando su identidad, folio y auditoría de creación.
+    /// </summary>
+    public void ActualizarDatos(
+        DateOnly fechaEntrega,
+        TimeOnly horaEntrega,
+        Guid areaReceptoraId,
+        string asunto,
+        MedioEntrega medioEntrega,
+        EstatusEntrega estatusEntrega,
+        TipoSolicitud tipoSolicitud,
+        TipoEvidencia tipoEvidencia,
+        bool tieneAcuse,
+        TipoAcuse tipoAcuse,
+        DateOnly fechaVencimiento)
+    {
+        var (asuntoLimpio, horaNormalizada) = ValidarYPrepararDatosEditables(
+            fechaEntrega,
+            horaEntrega,
+            areaReceptoraId,
+            asunto,
+            medioEntrega,
+            estatusEntrega,
+            tipoSolicitud,
+            tipoEvidencia,
+            tieneAcuse,
+            tipoAcuse,
+            fechaVencimiento);
+
+        if (AreaReceptora is not null && AreaReceptora.Id != areaReceptoraId)
+        {
+            AreaReceptora = null;
+        }
+
+        FechaEntrega = fechaEntrega;
+        HoraEntrega = horaNormalizada;
+        AreaReceptoraId = areaReceptoraId;
+        Asunto = asuntoLimpio;
+        MedioEntrega = medioEntrega;
+        EstatusEntrega = estatusEntrega;
+        TipoSolicitud = tipoSolicitud;
+        TipoEvidencia = tipoEvidencia;
+        TieneAcuse = tieneAcuse;
+        TipoAcuse = tipoAcuse;
+        FechaVencimiento = fechaVencimiento;
     }
 
     /// <summary>
@@ -207,6 +257,36 @@ public sealed partial class Solicitud : Entity<Guid>
         folioLimpio = recortado;
         error = null;
         return true;
+    }
+
+    private static (string AsuntoLimpio, TimeOnly HoraNormalizada) ValidarYPrepararDatosEditables(
+        DateOnly fechaEntrega,
+        TimeOnly horaEntrega,
+        Guid areaReceptoraId,
+        string asunto,
+        MedioEntrega medioEntrega,
+        EstatusEntrega estatusEntrega,
+        TipoSolicitud tipoSolicitud,
+        TipoEvidencia tipoEvidencia,
+        bool tieneAcuse,
+        TipoAcuse tipoAcuse,
+        DateOnly fechaVencimiento)
+    {
+        ValidarPlazo(fechaEntrega, fechaVencimiento);
+        ValidarAreaReceptora(areaReceptoraId);
+        var asuntoLimpio = ValidarYLimpiarAsunto(asunto);
+        ValidarEnums(medioEntrega, estatusEntrega, tipoSolicitud, tipoEvidencia, tipoAcuse);
+        ValidarAcuse(tieneAcuse, tipoAcuse);
+
+        return (asuntoLimpio, new TimeOnly(horaEntrega.Hour, horaEntrega.Minute));
+    }
+
+    private static void ValidarAreaReceptora(Guid areaReceptoraId)
+    {
+        if (areaReceptoraId == Guid.Empty)
+        {
+            throw new DomainException("El área receptora es obligatoria.");
+        }
     }
 
     private static void ValidarPlazo(DateOnly fechaEntrega, DateOnly fechaVencimiento)
