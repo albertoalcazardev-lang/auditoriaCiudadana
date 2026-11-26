@@ -42,6 +42,7 @@ public sealed partial class MigrationAndSchemaTests(MySqlTestFixture fixture)
 
         var tablasTrasDown = await ObtenerTablasAsync(container.GetConnectionString());
         Assert.DoesNotContain("solicitudes", tablasTrasDown, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("solicitud_idempotencias_eliminadas", tablasTrasDown, StringComparer.OrdinalIgnoreCase);
         Assert.DoesNotContain("folio_secuencias", tablasTrasDown, StringComparer.OrdinalIgnoreCase);
         Assert.DoesNotContain("areas_receptoras", tablasTrasDown, StringComparer.OrdinalIgnoreCase);
         Assert.Contains("AspNetUsers", tablasTrasDown, StringComparer.OrdinalIgnoreCase);
@@ -51,6 +52,7 @@ public sealed partial class MigrationAndSchemaTests(MySqlTestFixture fixture)
 
         var tablasTrasUp = await ObtenerTablasAsync(container.GetConnectionString());
         Assert.Contains("solicitudes", tablasTrasUp, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("solicitud_idempotencias_eliminadas", tablasTrasUp, StringComparer.OrdinalIgnoreCase);
         Assert.Contains("folio_secuencias", tablasTrasUp, StringComparer.OrdinalIgnoreCase);
         Assert.Contains("areas_receptoras", tablasTrasUp, StringComparer.OrdinalIgnoreCase);
         Assert.Equal(10, await db.AreasReceptoras.CountAsync());
@@ -212,6 +214,75 @@ public sealed partial class MigrationAndSchemaTests(MySqlTestFixture fixture)
         Assert.Equal(1451, exFkRestrict.Number);
     }
 
+    [Fact]
+    public async Task MigracionTombstoneEIndiceFechaEntrega_RevierteDownYUp_YValidaCollationCaseSensitiveYConstraints()
+    {
+        var password = $"MigTomb_{Guid.NewGuid():N}!9a";
+        await using var container = new MySqlBuilder("mysql:8.4")
+            .WithDatabase($"vyt_migtomb_{Guid.NewGuid():N}")
+            .WithUsername("vyt_mig")
+            .WithPassword(password)
+            .Build();
+
+        await container.StartAsync();
+        var connStr = container.GetConnectionString();
+
+        await using var db = fixture.CreateDbContext(connStr);
+        var migrator = db.GetService<IMigrator>();
+
+        await migrator.MigrateAsync();
+        Assert.False(db.Database.HasPendingModelChanges());
+
+        var indicesSolicitudes = await ObtenerIndicesTablaAsync(connStr, "solicitudes");
+        Assert.Contains("IX_solicitudes_fecha_entrega", indicesSolicitudes, StringComparer.OrdinalIgnoreCase);
+
+        var collationKey = await ObtenerCollationColumnaAsync(connStr, "solicitud_idempotencias_eliminadas", "idempotency_key");
+        Assert.Equal("utf8mb4_0900_as_cs", collationKey);
+
+        var userId = Guid.CreateVersion7().ToString();
+        await db.Database.ExecuteSqlInterpolatedAsync($@"
+            INSERT INTO AspNetUsers
+                (Id, UserName, NormalizedUserName, Email, NormalizedEmail, EmailConfirmed,
+                 PhoneNumberConfirmed, TwoFactorEnabled, LockoutEnabled, AccessFailedCount)
+            VALUES
+                ({userId}, 'tomb_admin', 'TOMB_ADMIN', 'tomb@vyt.test', 'TOMB@VYT.TEST', 1, 0, 0, 1, 0);");
+
+        // PK compuesta con collation case-sensitive permite coexistencia de 'Key-Case-1' y 'key-case-1'
+        await db.Database.ExecuteSqlInterpolatedAsync($@"
+            INSERT INTO solicitud_idempotencias_eliminadas
+                (creado_por_usuario_id, idempotency_key, idempotency_payload_hash, solicitud_id, eliminado_en_utc)
+            VALUES
+                ({userId}, 'Key-Case-1', {new string('a', 64)}, {Guid.CreateVersion7().ToString()}, '2026-05-15 12:00:00'),
+                ({userId}, 'key-case-1', {new string('b', 64)}, {Guid.CreateVersion7().ToString()}, '2026-05-15 12:05:00');");
+
+        // CHECK constraint en hash y FK ON DELETE RESTRICT hacia AspNetUsers
+        var exHash = await Assert.ThrowsAsync<MySqlException>(() =>
+            db.Database.ExecuteSqlInterpolatedAsync($@"
+                INSERT INTO solicitud_idempotencias_eliminadas
+                    (creado_por_usuario_id, idempotency_key, idempotency_payload_hash, solicitud_id, eliminado_en_utc)
+                VALUES
+                    ({userId}, 'bad-hash', 'corto', {Guid.CreateVersion7().ToString()}, '2026-05-15 12:10:00');"));
+        Assert.Equal(3819, exHash.Number);
+
+        var exDeleteUser = await Assert.ThrowsAsync<MySqlException>(() =>
+            db.Database.ExecuteSqlInterpolatedAsync($@"DELETE FROM AspNetUsers WHERE Id = {userId};"));
+        Assert.Equal(1451, exDeleteUser.Number);
+
+        // Down hasta AddSolicitudConcurrencyToken y vuelta a Up
+        await migrator.MigrateAsync("20261126103404_AddSolicitudConcurrencyToken");
+        var tablasTrasDown = await ObtenerTablasAsync(connStr);
+        Assert.DoesNotContain("solicitud_idempotencias_eliminadas", tablasTrasDown, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("solicitudes", tablasTrasDown, StringComparer.OrdinalIgnoreCase);
+
+        var indicesTrasDown = await ObtenerIndicesTablaAsync(connStr, "solicitudes");
+        Assert.DoesNotContain("IX_solicitudes_fecha_entrega", indicesTrasDown, StringComparer.OrdinalIgnoreCase);
+
+        await migrator.MigrateAsync();
+        Assert.False(db.Database.HasPendingModelChanges());
+        Assert.Contains("solicitud_idempotencias_eliminadas", await ObtenerTablasAsync(connStr), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("IX_solicitudes_fecha_entrega", await ObtenerIndicesTablaAsync(connStr, "solicitudes"), StringComparer.OrdinalIgnoreCase);
+    }
+
     private static async Task<HashSet<string>> ObtenerTablasAsync(string connectionString)
     {
         var tables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -242,5 +313,38 @@ public sealed partial class MigrationAndSchemaTests(MySqlTestFixture fixture)
         }
 
         return columns;
+    }
+
+    private static async Task<HashSet<string>> ObtenerIndicesTablaAsync(string connectionString, string tableName)
+    {
+        var indexes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var connection = new MySqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SHOW INDEX FROM `{tableName}`;";
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            indexes.Add(reader.GetString(reader.GetOrdinal("Key_name")));
+        }
+
+        return indexes;
+    }
+
+    private static async Task<string?> ObtenerCollationColumnaAsync(string connectionString, string tableName, string columnName)
+    {
+        await using var connection = new MySqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SHOW FULL COLUMNS FROM `{tableName}` WHERE Field = @field;";
+        cmd.Parameters.AddWithValue("@field", columnName);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (await reader.ReadAsync())
+        {
+            var ordinal = reader.GetOrdinal("Collation");
+            return reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
+        }
+
+        return null;
     }
 }

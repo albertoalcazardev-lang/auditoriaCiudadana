@@ -15,6 +15,46 @@ namespace VyTSystems.API.Controllers;
 [NoStore]
 public sealed class SolicitudesController(ISender sender, IAuthenticatedSessionService sessions) : ControllerBase
 {
+    [HttpGet]
+    [ProducesResponseType<ListadoSolicitudesResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> Listar(
+        [FromQuery(Name = "q")] string? q,
+        [FromQuery(Name = "ent_d")] string? entD,
+        [FromQuery(Name = "ent_h")] string? entH,
+        [FromQuery(Name = "ven_d")] string? venD,
+        [FromQuery(Name = "ven_h")] string? venH,
+        [FromQuery(Name = "dias")] string? dias,
+        [FromQuery(Name = "dias_min")] string? diasMin,
+        [FromQuery(Name = "dias_max")] string? diasMax,
+        [FromQuery(Name = "sort")] string? sort,
+        [FromQuery(Name = "dir")] string? dir,
+        [FromQuery(Name = "page")] string? page,
+        [FromQuery(Name = "size")] string? size,
+        CancellationToken cancellationToken)
+    {
+        var query = SolicitudesContractMappings.ToListarQuery(
+            Request.Query,
+            q,
+            entD,
+            entH,
+            venD,
+            venH,
+            dias,
+            diasMin,
+            diasMax,
+            sort,
+            dir,
+            page,
+            size);
+        var result = await sender.Send(query, cancellationToken);
+        return this.ToActionResult(result, r => r.ToResponse());
+    }
+
     [HttpGet("catalogos")]
     [ProducesResponseType<SolicitudesCatalogosResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -104,5 +144,35 @@ public sealed class SolicitudesController(ISender sender, IAuthenticatedSessionS
             result,
             r => r.Solicitud.ToEdicionResponse(),
             r => SolicitudesContractMappings.FormatStrongETag(r.VersionConcurrencia));
+    }
+
+    [HttpDelete("{id}")]
+    [ValidateAntiForgeryToken]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status412PreconditionFailed)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status428PreconditionRequired)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> Eliminar(
+        [FromRoute] string? id,
+        CancellationToken cancellationToken)
+    {
+        var session = sessions.GetCurrentSession();
+        if (session is null)
+        {
+            return this.UnauthorizedProblem();
+        }
+
+        var command = SolicitudesContractMappings.ToEliminarCommand(
+            session.UserId,
+            id,
+            Request.Headers.IfMatch);
+        var result = await sender.Send(command, cancellationToken);
+        return this.ToNoContentResult(result);
     }
 }

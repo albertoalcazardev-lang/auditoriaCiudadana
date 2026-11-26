@@ -16,6 +16,7 @@ public sealed class VyTSystemsDbContext(DbContextOptions<VyTSystemsDbContext> op
     public DbSet<AreaReceptora> AreasReceptoras => Set<AreaReceptora>();
     public DbSet<Solicitud> Solicitudes => Set<Solicitud>();
     internal DbSet<FolioSecuencia> FolioSecuencias => Set<FolioSecuencia>();
+    internal DbSet<SolicitudIdempotenciaEliminada> SolicitudIdempotenciasEliminadas => Set<SolicitudIdempotenciaEliminada>();
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {

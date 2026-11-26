@@ -9,7 +9,9 @@ public enum ErrorType
     Validation = 2,
     NotFound = 3,
     Conflict = 4,
-    Unauthorized = 5
+    Unauthorized = 5,
+    PreconditionFailed = 6,
+    PreconditionRequired = 7
 }
 
 public sealed record Error(string Code, string Description, ErrorType Type = ErrorType.Failure)
@@ -24,6 +26,12 @@ public sealed record Error(string Code, string Description, ErrorType Type = Err
 
     public static Error Conflict(string code, string description) =>
         new(code, description, ErrorType.Conflict);
+
+    public static Error PreconditionFailed(string code, string description) =>
+        new(code, description, ErrorType.PreconditionFailed);
+
+    public static Error PreconditionRequired(string code, string description) =>
+        new(code, description, ErrorType.PreconditionRequired);
 
     public static Error Failure(string code, string description) =>
         new(code, description, ErrorType.Failure);

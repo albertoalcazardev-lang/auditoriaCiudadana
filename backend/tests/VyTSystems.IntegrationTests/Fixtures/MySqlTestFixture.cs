@@ -133,6 +133,7 @@ public sealed class MySqlTestFixture : IAsyncLifetime
     {
         await using var db = CreateDbContext();
         await db.Database.ExecuteSqlRawAsync("DELETE FROM solicitudes;");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM solicitud_idempotencias_eliminadas;");
         await db.Database.ExecuteSqlRawAsync("DELETE FROM folio_secuencias;");
     }
 

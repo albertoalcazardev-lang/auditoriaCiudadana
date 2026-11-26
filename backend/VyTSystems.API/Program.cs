@@ -60,7 +60,8 @@ builder.Services.AddOpenApi(options =>
         }
 
         if (string.Equals(context.Description.RelativePath, "api/solicitudes/{id}", StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(context.Description.HttpMethod, "PUT", StringComparison.OrdinalIgnoreCase))
+            (string.Equals(context.Description.HttpMethod, "PUT", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(context.Description.HttpMethod, "DELETE", StringComparison.OrdinalIgnoreCase)))
         {
             operation.Parameters ??= [];
             var existente = operation.Parameters.FirstOrDefault(p =>
