@@ -1,0 +1,629 @@
+.solicitud-card {
+  width: 100%;
+  max-width: 960px;
+  background-color: #ffffff;
+  border: 1px solid #e4e8f0;
+  border-radius: 12px;
+  padding: 32px;
+  box-shadow: 0 4px 16px rgba(17, 24, 39, 0.05);
+}
+
+.solicitud-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.solicitud-card-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.solicitud-folio-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid #e4e8f0;
+  background-color: #f8fafc;
+  font-size: 12px;
+  font-weight: 500;
+  color: #5b6475;
+}
+
+.solicitud-folio-chip-immutable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background-color: #eaf1ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.solicitud-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 24px;
+}
+
+.solicitud-col-full {
+  grid-column: 1 / -1;
+}
+
+.solicitud-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.solicitud-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  color: #111827;
+}
+
+.solicitud-required {
+  color: #dc2626;
+}
+
+.solicitud-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.solicitud-input-icon {
+  position: absolute;
+  right: 12px;
+  color: #5b6475;
+  pointer-events: none;
+}
+
+.solicitud-input,
+.solicitud-select {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  background-color: #ffffff;
+  border: 1px solid #d0d6e2;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #111827;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.solicitud-input.has-right-icon {
+  padding-right: 38px;
+}
+
+.solicitud-input.has-right-button {
+  padding-right: 40px;
+}
+
+.solicitud-input::placeholder {
+  color: #9aa3b2;
+  opacity: 1;
+}
+
+.solicitud-input:focus,
+.solicitud-select:focus {
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 2px #e0e7ff;
+}
+
+.solicitud-input[aria-invalid='true'],
+.solicitud-select[aria-invalid='true'] {
+  border-color: #b91c1c;
+}
+
+.solicitud-input:disabled,
+.solicitud-select:disabled {
+  background-color: #f8fafc;
+  color: #5b6475;
+  cursor: not-allowed;
+}
+
+.solicitud-folio-action-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding-top: 24px;
+}
+
+.solicitud-field-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #b91c1c;
+}
+
+.solicitud-asunto-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.solicitud-asunto-footer .solicitud-field-error {
+  margin-top: 0;
+}
+
+.solicitud-counter {
+  margin-left: auto;
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: #5b6475;
+}
+
+.solicitud-counter.is-warning {
+  color: #b45309;
+}
+
+.solicitud-counter.is-error {
+  color: #b91c1c;
+}
+
+.solicitud-dias-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid #e4e8f0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.solicitud-dias-control.is-normal {
+  background-color: #dcfce7;
+  color: #15803d;
+  border-color: #bbf7d0;
+}
+
+.solicitud-dias-control.is-warning {
+  background-color: #ffedd5;
+  color: #c2410c;
+  border-color: #fed7aa;
+}
+
+.solicitud-dias-control.is-urgent {
+  background-color: #fee2e2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.solicitud-dias-control.is-empty {
+  background-color: #f8fafc;
+  color: #9aa3b2;
+  border-color: #e4e8f0;
+}
+
+.solicitud-combobox {
+  position: relative;
+}
+
+.solicitud-combobox-toggle {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  bottom: 1px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  border-radius: 7px;
+  color: #5b6475;
+  cursor: pointer;
+}
+
+.solicitud-combobox-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.solicitud-combobox-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background-color: #ffffff;
+  border: 1px solid #d0d6e2;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(15, 30, 74, 0.14);
+}
+
+.solicitud-combobox-option {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #111827;
+  cursor: pointer;
+}
+
+.solicitud-combobox-option.is-active {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+}
+
+.solicitud-combobox-option[aria-selected='true'] {
+  font-weight: 600;
+}
+
+.solicitud-combobox-empty {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #5b6475;
+}
+
+.solicitud-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.solicitud-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.solicitud-banner-error {
+  background-color: #fee2e2;
+  border: 1px solid #fca5a5;
+  color: #b91c1c;
+}
+
+.solicitud-banner-success {
+  background-color: #dcfce7;
+  border: 1px solid #86efac;
+  color: #15803d;
+}
+
+.solicitud-banner-info {
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+}
+
+.solicitud-banner-warning {
+  background-color: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+}
+
+.solicitud-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  max-width: 960px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 6px 18px rgba(15, 30, 74, 0.08);
+}
+
+.solicitud-toast-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.solicitud-toast-info {
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+}
+
+.solicitud-toast-success {
+  background-color: #dcfce7;
+  border: 1px solid #86efac;
+  color: #15803d;
+}
+
+.solicitud-toast-close {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: currentColor;
+  cursor: pointer;
+}
+
+.solicitud-toast-close:hover {
+  background-color: rgba(17, 24, 39, 0.06);
+}
+
+@keyframes solicitud-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.solicitud-skeleton-control {
+  width: 100%;
+  height: 40px;
+  border-radius: 8px;
+  background-image: linear-gradient(90deg, #eef2f7 0%, #f8fafc 50%, #eef2f7 100%);
+  background-size: 200% 100%;
+  animation: solicitud-shimmer 1400ms ease-in-out infinite;
+}
+
+.solicitud-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.solicitud-btn svg {
+  flex-shrink: 0;
+}
+
+.solicitud-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.solicitud-btn-primary {
+  background-color: #1d4ed8;
+  color: #ffffff;
+  border: 1px solid transparent;
+}
+
+.solicitud-btn-primary:hover:enabled {
+  background-color: #1e40af;
+}
+
+.solicitud-btn-primary:active:enabled {
+  background-color: #1e3a8a;
+}
+
+.solicitud-btn-secondary {
+  background-color: #ffffff;
+  color: #111827;
+  border: 1px solid #d0d6e2;
+}
+
+.solicitud-btn-secondary:hover:enabled {
+  background-color: #f8fafc;
+  border-color: #9aa3b2;
+}
+
+.solicitud-btn-danger {
+  background-color: #b91c1c;
+  color: #ffffff;
+  border: 1px solid transparent;
+}
+
+.solicitud-btn-danger:hover:enabled {
+  background-color: #991b1b;
+}
+
+.solicitud-btn-danger-outline {
+  background-color: #ffffff;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.solicitud-btn-danger-outline:hover:enabled {
+  background-color: #fef2f2;
+  border-color: #ef4444;
+}
+
+.solicitud-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid #e4e8f0;
+}
+
+.solicitud-footer-note {
+  font-size: 12px;
+  font-weight: 500;
+  color: #dc2626;
+}
+
+.solicitud-mobile-required-note {
+  display: none;
+}
+
+.solicitud-actions-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.solicitud-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background-color: rgba(15, 30, 74, 0.55);
+}
+
+.solicitud-modal {
+  width: 100%;
+  max-width: 440px;
+  padding: 32px;
+  background-color: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(15, 30, 74, 0.25);
+  color: #111827;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+}
+
+.solicitud-modal-title {
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.solicitud-modal-message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #5b6475;
+}
+
+.solicitud-modal-detail {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background-color: #f5f7fb;
+  border: 1px solid #e4e8f0;
+  font-size: 13px;
+  color: #111827;
+}
+
+.solicitud-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.solicitud-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+  margin-top: 20px;
+}
+
+.solicitud-summary-item dt {
+  font-size: 12px;
+  font-weight: 600;
+  color: #5b6475;
+}
+
+.solicitud-summary-item dd {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+  word-break: break-word;
+}
+
+@media (max-width: 1024px) {
+  .solicitud-grid,
+  .solicitud-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .solicitud-folio-action-cell {
+    padding-top: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .solicitud-card {
+    padding: 20px;
+  }
+
+  .solicitud-mobile-required-note {
+    display: block;
+    margin-top: 16px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #dc2626;
+  }
+
+  .solicitud-actions-bar {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 30;
+    height: 72px;
+    margin-top: 0;
+    padding: 0 12px;
+    background-color: #ffffff;
+    border-top: 1px solid #e4e8f0;
+    box-shadow: 0 -4px 12px rgba(17, 24, 39, 0.08);
+  }
+
+  .solicitud-actions-bar .solicitud-footer-note {
+    display: none;
+  }
+
+  .solicitud-actions-buttons {
+    width: 100%;
+    margin-left: 0;
+    gap: 8px;
+  }
+
+  .solicitud-actions-buttons .solicitud-btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 10px;
+    gap: 6px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .solicitud-card *,
+  .solicitud-toast,
+  .solicitud-toast *,
+  .solicitud-modal-overlay * {
+    transition: none !important;
+    animation: none !important;
+  }
+
+  .solicitud-skeleton-control {
+    background-image: none;
+    background-color: #eef2f7;
+  }
+}
