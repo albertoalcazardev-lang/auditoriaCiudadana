@@ -166,26 +166,110 @@ function mapValidationProblemDetails(details: unknown): SolicitudFieldErrors {
   return mapped;
 }
 
+const UNCERTAIN_SUBMISSION_STORAGE_KEY = 'vyt.solicitudes.uncertainSubmission';
+
+interface PendingSubmissionRecord {
+  ownerUserId: string;
+  idempotencyKey: string;
+  payload: CrearSolicitudPayload;
+  values: SolicitudFormValues;
+  manualFolioDraft: string;
+  wasUncertain: boolean;
+}
+
+function readUncertainSubmission(): PendingSubmissionRecord | null {
+  try {
+    const raw = window.sessionStorage.getItem(UNCERTAIN_SUBMISSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PendingSubmissionRecord> | null;
+    if (
+      !parsed ||
+      typeof parsed.ownerUserId !== 'string' ||
+      typeof parsed.idempotencyKey !== 'string' ||
+      !parsed.payload ||
+      typeof parsed.payload !== 'object' ||
+      !parsed.values ||
+      typeof parsed.values !== 'object' ||
+      typeof parsed.manualFolioDraft !== 'string'
+    ) {
+      window.sessionStorage.removeItem(UNCERTAIN_SUBMISSION_STORAGE_KEY);
+      return null;
+    }
+    return {
+      ownerUserId: parsed.ownerUserId,
+      idempotencyKey: parsed.idempotencyKey,
+      payload: parsed.payload,
+      values: parsed.values,
+      manualFolioDraft: parsed.manualFolioDraft,
+      wasUncertain: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveUncertainSubmission(record: PendingSubmissionRecord): void {
+  try {
+    window.sessionStorage.setItem(
+      UNCERTAIN_SUBMISSION_STORAGE_KEY,
+      JSON.stringify({
+        ownerUserId: record.ownerUserId,
+        idempotencyKey: record.idempotencyKey,
+        payload: record.payload,
+        values: record.values,
+        manualFolioDraft: record.manualFolioDraft,
+      }),
+    );
+  } catch {
+    // Ignorar errores de almacenamiento restringido; el estado en memoria sigue activo.
+  }
+}
+
+function clearUncertainSubmission(): void {
+  try {
+    window.sessionStorage.removeItem(UNCERTAIN_SUBMISSION_STORAGE_KEY);
+  } catch {
+    // Ignorar errores de almacenamiento restringido.
+  }
+}
+
 function getErrorCode(details: unknown): string | undefined {
   if (!details || typeof details !== 'object') return undefined;
   const code = (details as { code?: unknown }).code;
   return typeof code === 'string' ? code : undefined;
 }
 
-export function useNuevaSolicitudViewModel() {
+export function useNuevaSolicitudViewModel(userId: string) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [initialDefaults, setInitialDefaults] = useState<SolicitudFormValues>(() =>
-    createInitialFormValues(),
+  const [initialBootstrap] = useState(() => {
+    const defaults = createInitialFormValues();
+    const saved = readUncertainSubmission();
+    if (saved && saved.ownerUserId !== userId) {
+      clearUncertainSubmission();
+    }
+    const restored = saved && saved.ownerUserId === userId ? saved : null;
+    return { defaults, restored };
+  });
+
+  const [initialDefaults, setInitialDefaults] = useState<SolicitudFormValues>(
+    () => initialBootstrap.defaults,
   );
   const [formState, setFormState] = useState<{
     values: SolicitudFormValues;
     manualFolioDraft: string;
-  }>(() => ({
-    values: initialDefaults,
-    manualFolioDraft: '',
-  }));
+  }>(() =>
+    initialBootstrap.restored
+      ? {
+          values: initialBootstrap.restored.values,
+          manualFolioDraft: initialBootstrap.restored.manualFolioDraft,
+        }
+      : {
+          values: initialDefaults,
+          manualFolioDraft: '',
+        },
+  );
   const { values } = formState;
   const [touchedFields, setTouchedFields] = useState<Partial<Record<SolicitudFieldName, boolean>>>(
     {},
@@ -193,16 +277,35 @@ export function useNuevaSolicitudViewModel() {
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [serverFieldErrors, setServerFieldErrors] = useState<SolicitudFieldErrors>({});
   const [serverBannerError, setServerBannerError] = useState<string | null>(null);
-  const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
+  const [submitStatus, setSubmitStatus] = useState<SubmitStatus>(() =>
+    initialBootstrap.restored ? 'uncertain' : 'idle',
+  );
   const [modalState, setModalState] = useState<SolicitudModalState>('none');
   const [confirmacion, setConfirmacion] = useState<SolicitudConfirmacionResumen | null>(null);
 
-  const pendingSubmissionRef = useRef<{
-    idempotencyKey: string;
-    payload: CrearSolicitudPayload;
-  } | null>(null);
+  const pendingSubmissionRef = useRef<PendingSubmissionRecord | null>(initialBootstrap.restored);
   const allowExitRef = useRef(false);
   const fieldRefs = useRef<Partial<Record<SolicitudFieldName, HTMLElement | null>>>({});
+
+  useEffect(() => {
+    if (pendingSubmissionRef.current && pendingSubmissionRef.current.ownerUserId !== userId) {
+      clearUncertainSubmission();
+      pendingSubmissionRef.current = null;
+      const freshDefaults = createInitialFormValues();
+      setInitialDefaults(freshDefaults);
+      setFormState({ values: freshDefaults, manualFolioDraft: '' });
+      setServerFieldErrors({});
+      setServerBannerError(null);
+      setModalState('none');
+      setSubmitStatus('idle');
+      return;
+    }
+
+    const saved = readUncertainSubmission();
+    if (saved && saved.ownerUserId !== userId) {
+      clearUncertainSubmission();
+    }
+  }, [userId]);
 
   const catalogosQuery = useQuery({
     queryKey: ['solicitudes', 'catalogos'],
@@ -464,36 +567,22 @@ export function useNuevaSolicitudViewModel() {
   );
 
   const executeSubmission = useCallback(
-    async (idempotencyKey: string, payload: CrearSolicitudPayload) => {
+    async (record: PendingSubmissionRecord) => {
+      pendingSubmissionRef.current = record;
       setSubmitStatus('submitting');
       setModalState('none');
       setServerBannerError(null);
 
       try {
-        const resultado = await crearSolicitud(payload, idempotencyKey);
+        const resultado = await crearSolicitud(record.payload, record.idempotencyKey);
+        clearUncertainSubmission();
         pendingSubmissionRef.current = null;
         setConfirmacion(buildConfirmacionResumen(resultado));
         setSubmitStatus('succeeded');
       } catch (error) {
         if (error instanceof HttpClientError) {
-          if (error.statusCode === 400) {
-            clearCsrfToken();
-            pendingSubmissionRef.current = null;
-            setSubmitStatus('idle');
-            const mapped = mapValidationProblemDetails(error.details);
-            if (Object.keys(mapped).length > 0) {
-              setServerFieldErrors(mapped);
-              const firstServerField = FIELD_ORDER.find((field) => Boolean(mapped[field]));
-              if (firstServerField) focusField(firstServerField);
-            } else {
-              setServerBannerError(
-                'La solicitud no pudo validarse o la protección de seguridad caducó. Revisa los datos e inténtalo de nuevo.',
-              );
-            }
-            return;
-          }
-
           if (error.statusCode === 409) {
+            clearUncertainSubmission();
             pendingSubmissionRef.current = null;
             setSubmitStatus('idle');
             const code = getErrorCode(error.details);
@@ -514,27 +603,76 @@ export function useNuevaSolicitudViewModel() {
             return;
           }
 
-          if (error.statusCode === 401 || error.statusCode === 403) {
-            if (error.statusCode === 401) {
-              clearCsrfToken();
-              void queryClient.invalidateQueries({ queryKey: sessionKey });
+          if (error.statusCode === 400) {
+            clearCsrfToken();
+            if (record.wasUncertain) {
+              setSubmitStatus('uncertain');
+              setServerBannerError(
+                'El token de seguridad expiró; se renovará al pulsar Reintentar conservando la misma operación.',
+              );
+              return;
             }
+            clearUncertainSubmission();
             pendingSubmissionRef.current = null;
             setSubmitStatus('idle');
-            setServerBannerError(
-              error.statusCode === 401
-                ? 'Tu sesión expiró. Inicia sesión nuevamente para continuar.'
-                : 'No tienes permisos para registrar solicitudes.',
-            );
+            const mapped = mapValidationProblemDetails(error.details);
+            if (Object.keys(mapped).length > 0) {
+              setServerFieldErrors(mapped);
+              const firstServerField = FIELD_ORDER.find((field) => Boolean(mapped[field]));
+              if (firstServerField) focusField(firstServerField);
+            } else {
+              setServerBannerError(
+                'La solicitud no pudo validarse o la protección de seguridad caducó. Revisa los datos e inténtalo de nuevo.',
+              );
+            }
+            return;
+          }
+
+          if (error.statusCode === 401) {
+            clearCsrfToken();
+            if (record.wasUncertain) {
+              setSubmitStatus('uncertain');
+              setServerBannerError(
+                'Tu sesión expiró. Inicia sesión con la misma cuenta para recuperar esta operación.',
+              );
+              void queryClient.invalidateQueries({ queryKey: sessionKey });
+              return;
+            }
+            clearUncertainSubmission();
+            pendingSubmissionRef.current = null;
+            setSubmitStatus('idle');
+            setServerBannerError('Tu sesión expiró. Inicia sesión nuevamente para continuar.');
+            void queryClient.invalidateQueries({ queryKey: sessionKey });
+            return;
+          }
+
+          if (error.statusCode === 403) {
+            if (record.wasUncertain) {
+              setSubmitStatus('uncertain');
+              setServerBannerError(
+                'No tienes permisos para completar la recuperación; la operación pendiente se conservó.',
+              );
+              return;
+            }
+            clearUncertainSubmission();
+            pendingSubmissionRef.current = null;
+            setSubmitStatus('idle');
+            setServerBannerError('No tienes permisos para registrar solicitudes.');
             return;
           }
         }
 
-        // Fallo de red, 500, 503 u otro resultado incierto: conservar payload e Idempotency-Key
+        // Fallo de red, 500, 503 u otro resultado incierto: conservar payload, valores e Idempotency-Key
+        const uncertainRecord: PendingSubmissionRecord = {
+          ...record,
+          wasUncertain: true,
+        };
+        pendingSubmissionRef.current = uncertainRecord;
+        saveUncertainSubmission(uncertainRecord);
         setSubmitStatus('uncertain');
       }
     },
-    [buildConfirmacionResumen, focusField],
+    [buildConfirmacionResumen, focusField, queryClient],
   );
 
   const requestSubmit = useCallback(() => {
@@ -557,7 +695,7 @@ export function useNuevaSolicitudViewModel() {
   }, [catalogosQuery.isError, catalogosQuery.isPending, focusField, isFormLocked, values]);
 
   const confirmRegister = useCallback(() => {
-    if (submitStatus === 'submitting') return;
+    if (submitStatus === 'submitting' || submitStatus === 'uncertain') return;
     const payload = buildPayload();
     if (!payload) {
       setModalState('none');
@@ -565,16 +703,40 @@ export function useNuevaSolicitudViewModel() {
       return;
     }
 
-    const idempotencyKey = crypto.randomUUID();
-    pendingSubmissionRef.current = { idempotencyKey, payload };
-    void executeSubmission(idempotencyKey, payload);
-  }, [buildPayload, executeSubmission, submitStatus]);
+    const record: PendingSubmissionRecord = {
+      ownerUserId: userId,
+      idempotencyKey: crypto.randomUUID(),
+      payload,
+      values: formState.values,
+      manualFolioDraft: formState.manualFolioDraft,
+      wasUncertain: false,
+    };
+    void executeSubmission(record);
+  }, [
+    buildPayload,
+    executeSubmission,
+    formState.manualFolioDraft,
+    formState.values,
+    submitStatus,
+    userId,
+  ]);
 
   const retryUncertainSubmission = useCallback(() => {
-    if (submitStatus === 'submitting' || !pendingSubmissionRef.current) return;
-    const { idempotencyKey, payload } = pendingSubmissionRef.current;
-    void executeSubmission(idempotencyKey, payload);
-  }, [executeSubmission, submitStatus]);
+    if (submitStatus === 'submitting') return;
+
+    const currentRecord = pendingSubmissionRef.current;
+    const storedRecord = readUncertainSubmission();
+    const record = currentRecord ?? (storedRecord?.ownerUserId === userId ? storedRecord : null);
+
+    if (!record || record.ownerUserId !== userId || (storedRecord && storedRecord.ownerUserId !== userId)) {
+      clearUncertainSubmission();
+      pendingSubmissionRef.current = null;
+      setSubmitStatus('idle');
+      return;
+    }
+
+    void executeSubmission({ ...record, wasUncertain: true });
+  }, [executeSubmission, submitStatus, userId]);
 
   const cancelConfirmRegister = useCallback(() => {
     if (submitStatus === 'submitting') return;
@@ -617,6 +779,7 @@ export function useNuevaSolicitudViewModel() {
 
   const resetFormulario = useCallback(() => {
     const freshDefaults = createInitialFormValues();
+    clearUncertainSubmission();
     pendingSubmissionRef.current = null;
     allowExitRef.current = false;
     setInitialDefaults(freshDefaults);

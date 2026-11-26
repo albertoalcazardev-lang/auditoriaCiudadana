@@ -92,6 +92,7 @@ export function NuevaSolicitudForm({ vm }: NuevaSolicitudFormProps) {
             <AlertCircle size={18} aria-hidden="true" />
             <span>
               No fue posible completar la operación. Tus datos se conservaron; inténtalo de nuevo
+              {serverBannerError ? ` (${serverBannerError})` : ''}
             </span>
           </div>
           <button
@@ -106,7 +107,7 @@ export function NuevaSolicitudForm({ vm }: NuevaSolicitudFormProps) {
         </div>
       )}
 
-      {serverBannerError && (
+      {!isUncertain && serverBannerError && (
         <div role="alert" className="solicitud-banner solicitud-banner-error">
           <div className="solicitud-banner-content">
             <AlertCircle size={18} aria-hidden="true" />

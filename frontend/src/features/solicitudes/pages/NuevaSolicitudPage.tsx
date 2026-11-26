@@ -24,7 +24,7 @@ function NuevaSolicitudWorkspace({
   session: Session;
   logout: LogoutAction;
 }) {
-  const vm = useNuevaSolicitudViewModel();
+  const vm = useNuevaSolicitudViewModel(session.userId);
 
   return (
     <AdminShell

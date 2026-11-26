@@ -836,3 +836,256 @@ test('manejo de 409 Solicitud.IdempotenciaConflicto y expiración de sesión 401
   await page.goto('/admin/solicitudes/nueva');
   await expect(page).toHaveURL(/\/admin\/login$/);
 });
+
+test('recuperación tras pérdida de respuesta + rechazo CSRF (400) conserva Idempotency-Key sin duplicar registro', async ({
+  page,
+}) => {
+  let csrfCalls = 0;
+  let activeCsrf = '';
+  let postAttempts = 0;
+  const seenKeys: string[] = [];
+  const seenPayloads: string[] = [];
+  const createdByIdempotencyKey = new Map<
+    string,
+    { id: string; folio: string; fechaVencimiento: string; diasRestantes: number; estatus: string }
+  >();
+
+  await page.route('https://localhost:5173/api/**', async (route) => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+
+    if (path === '/api/auth/me') {
+      return route.fulfill({
+        json: { userId: 'admin-1', userName: 'Ana Administradora', roles: ['Administrador'] },
+      });
+    }
+    if (path === '/api/auth/csrf') {
+      csrfCalls += 1;
+      activeCsrf = `csrf-rec-${csrfCalls}`;
+      return route.fulfill({ json: { requestToken: activeCsrf } });
+    }
+    if (path === '/api/solicitudes/catalogos') {
+      return route.fulfill({ json: MOCK_CATALOGOS });
+    }
+    if (path === '/api/solicitudes' && req.method() === 'POST') {
+      postAttempts += 1;
+      const key = req.headers()['idempotency-key'];
+      seenKeys.push(key);
+      seenPayloads.push(req.postData() ?? '');
+
+      if (postAttempts === 1) {
+        const body = req.postDataJSON();
+        createdByIdempotencyKey.set(key, {
+          id: 'sol-auto-persisted-1',
+          folio: 'SOL-2026-001',
+          fechaVencimiento: body.fechaVencimiento,
+          diasRestantes: 10,
+          estatus: body.estatusEntrega,
+        });
+        return route.abort('connectionfailed');
+      }
+
+      if (postAttempts === 2) {
+        return route.fulfill({ status: 400, json: { title: 'CSRF inválido' } });
+      }
+
+      expect(req.headers()['x-csrf-token']).toBe('csrf-rec-2');
+      const existing = createdByIdempotencyKey.get(key);
+      if (existing) {
+        return route.fulfill({ status: 200, json: existing });
+      }
+      const body = req.postDataJSON();
+      const created = {
+        id: 'sol-duplicada',
+        folio: 'SOL-2026-002',
+        fechaVencimiento: body.fechaVencimiento,
+        diasRestantes: 10,
+        estatus: body.estatusEntrega,
+      };
+      createdByIdempotencyKey.set(key, created);
+      return route.fulfill({ status: 201, json: created });
+    }
+    return route.abort();
+  });
+
+  await page.goto('/admin/solicitudes/nueva');
+  await fillValidForm(page, 'BORRADOR');
+  await page.getByRole('button', { name: 'Generar folio automático' }).click();
+  await page.getByRole('button', { name: 'Guardar' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Registrar' }).click();
+
+  await expect(page.getByRole('alert')).toContainText(
+    'No fue posible completar la operación. Tus datos se conservaron; inténtalo de nuevo',
+  );
+
+  // Primer Reintentar recibe 400 (CSRF expirado): conserva K1, payload y estado uncertain
+  await page.getByRole('button', { name: 'Reintentar' }).click();
+  await expect(page.getByRole('alert')).toContainText(
+    'El token de seguridad expiró; se renovará al pulsar Reintentar conservando la misma operación',
+  );
+  await expect(page.getByLabel(/^Folio/i)).toBeDisabled();
+
+  // Segundo Reintentar renueva CSRF, reutiliza K1 y recupera SOL-2026-001 con 1 solo registro creado
+  await page.getByRole('button', { name: 'Reintentar' }).click();
+  await expect(page.getByRole('status')).toContainText(
+    'Solicitud SOL-2026-001 registrada correctamente',
+  );
+  expect(csrfCalls).toBe(2);
+  expect(createdByIdempotencyKey.size).toBe(1);
+  expect(seenKeys).toHaveLength(3);
+  expect(seenKeys[0]).toBe(seenKeys[1]);
+  expect(seenKeys[1]).toBe(seenKeys[2]);
+  expect(seenPayloads[0]).toBe(seenPayloads[1]);
+  expect(seenPayloads[1]).toBe(seenPayloads[2]);
+});
+
+test('recuperación tras pérdida de respuesta + 401: re-login mismo usuario recupera SOL-2026-001 y otro usuario descarta operación ajena', async ({
+  page,
+}) => {
+  let activeUser: { userId: string; userName: string } | null = {
+    userId: 'admin-1',
+    userName: 'Ana Administradora',
+  };
+  let activeCsrf = 'csrf-init';
+  let seq = 0;
+  const createdByOwnerAndKey = new Map<
+    string,
+    { id: string; folio: string; fechaVencimiento: string; diasRestantes: number; estatus: string }
+  >();
+  const postLog: Array<{ userId: string; key: string; payload: string }> = [];
+
+  await page.route('https://localhost:5173/api/**', async (route) => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+
+    if (path === '/api/auth/me') {
+      return activeUser
+        ? route.fulfill({
+            json: { userId: activeUser.userId, userName: activeUser.userName, roles: ['Administrador'] },
+          })
+        : route.fulfill({ status: 401 });
+    }
+    if (path === '/api/auth/csrf') {
+      activeCsrf = `csrf-${randomUUID()}`;
+      return route.fulfill({ json: { requestToken: activeCsrf } });
+    }
+    if (path === '/api/auth/login' && req.method() === 'POST') {
+      const body = req.postDataJSON();
+      activeUser =
+        body.identifier === 'admin2'
+          ? { userId: 'admin-2', userName: 'Beto Administrador' }
+          : { userId: 'admin-1', userName: 'Ana Administradora' };
+      return route.fulfill({ status: 200, body: '' });
+    }
+    if (path === '/api/auth/logout' && req.method() === 'POST') {
+      activeUser = null;
+      return route.fulfill({ status: 204 });
+    }
+    if (path === '/api/solicitudes/catalogos') {
+      return activeUser
+        ? route.fulfill({ json: MOCK_CATALOGOS })
+        : route.fulfill({ status: 401, json: { code: 'Auth.Unauthenticated' } });
+    }
+    if (path === '/api/solicitudes' && req.method() === 'POST') {
+      if (!activeUser) {
+        return route.fulfill({ status: 401, json: { code: 'Auth.Unauthenticated' } });
+      }
+      const key = req.headers()['idempotency-key'];
+      const payload = req.postData() ?? '';
+      postLog.push({ userId: activeUser.userId, key, payload });
+
+      const compositeKey = `${activeUser.userId}:${key}`;
+      const existing = createdByOwnerAndKey.get(compositeKey);
+      if (existing) {
+        return route.fulfill({ status: 200, json: existing });
+      }
+
+      seq += 1;
+      const body = req.postDataJSON();
+      const record = {
+        id: `sol-${seq}`,
+        folio: `SOL-2026-00${seq}`,
+        fechaVencimiento: body.fechaVencimiento,
+        diasRestantes: 10,
+        estatus: body.estatusEntrega,
+      };
+      createdByOwnerAndKey.set(compositeKey, record);
+      return route.abort('connectionfailed');
+    }
+    return route.abort();
+  });
+
+  // Parte A: admin-1 pierde respuesta, expira sesión (401) en Reintentar y recupera tras re-login
+  await page.goto('/admin/solicitudes/nueva');
+  await fillValidForm(page, 'BORRADOR');
+  await page.getByRole('button', { name: 'Generar folio automático' }).click();
+  await page.getByRole('button', { name: 'Guardar' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Registrar' }).click();
+
+  await expect(page.getByRole('alert')).toContainText(
+    'No fue posible completar la operación. Tus datos se conservaron; inténtalo de nuevo',
+  );
+
+  // Expira sesión y al pulsar Reintentar recibe 401 -> redirige a /admin/login
+  activeUser = null;
+  await page.getByRole('button', { name: 'Reintentar' }).click();
+  await expect(page).toHaveURL(/\/admin\/login$/);
+
+  // Re-login con el MISMO usuario admin-1
+  await page.getByLabel('Usuario o correo electrónico').fill('admin1');
+  await page.locator('#login-password').fill('Secret123!');
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
+  await expect(page).toHaveURL(/\/admin\/dashboard$/);
+
+  await page.getByRole('link', { name: 'Nueva solicitud' }).click();
+  await expect(page.getByRole('alert')).toContainText(
+    'No fue posible completar la operación. Tus datos se conservaron; inténtalo de nuevo',
+  );
+  await expect(page.getByLabel(/^Folio/i)).toBeDisabled();
+  await expect(page.getByLabel(/^Folio/i)).toHaveValue('Se asignará al guardar');
+
+  await page.getByRole('button', { name: 'Reintentar' }).click();
+  await expect(page.getByRole('status')).toContainText(
+    'Solicitud SOL-2026-001 registrada correctamente',
+  );
+  expect(createdByOwnerAndKey.size).toBe(1);
+  expect(postLog).toHaveLength(2);
+  expect(postLog[0].key).toBe(postLog[1].key);
+  expect(postLog[0].payload).toBe(postLog[1].payload);
+
+  // Parte B: nueva operación incierta de admin-1 -> 401 -> inicia sesión admin-2 y descarta operación ajena
+  await page.getByRole('button', { name: 'Registrar otra solicitud' }).click();
+  await fillValidForm(page, 'BORRADOR-2');
+  await page.getByRole('button', { name: 'Generar folio automático' }).click();
+  await page.getByRole('button', { name: 'Guardar' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Registrar' }).click();
+  await expect(page.getByRole('alert')).toContainText(
+    'No fue posible completar la operación. Tus datos se conservaron; inténtalo de nuevo',
+  );
+  const keyAdmin1SecondOp = postLog[2].key;
+
+  activeUser = null;
+  await page.getByRole('button', { name: 'Reintentar' }).click();
+  await expect(page).toHaveURL(/\/admin\/login$/);
+
+  // Inicia sesión otro administrador: admin-2
+  await page.getByLabel('Usuario o correo electrónico').fill('admin2');
+  await page.locator('#login-password').fill('Secret123!');
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
+  await expect(page).toHaveURL(/\/admin\/dashboard$/);
+
+  await page.getByRole('link', { name: 'Nueva solicitud' }).click();
+  await expect(page.getByLabel(/^Folio/i)).toBeEnabled();
+  await expect(page.getByLabel(/^Folio/i)).toHaveValue('');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  const storedAfterSwitch = await page.evaluate((storageKey) => {
+    const storage = (
+      globalThis as unknown as { sessionStorage: { getItem: (key: string) => string | null } }
+    ).sessionStorage;
+    return storage.getItem(storageKey);
+  }, 'vyt.solicitudes.uncertainSubmission');
+  expect(storedAfterSwitch).toBeNull();
+  expect(postLog.some((entry) => entry.userId === 'admin-2' && entry.key === keyAdmin1SecondOp)).toBe(
+    false,
+  );
+});
