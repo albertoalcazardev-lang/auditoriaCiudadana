@@ -17,6 +17,37 @@ public sealed class VyTSystemsDbContext(DbContextOptions<VyTSystemsDbContext> op
     public DbSet<Solicitud> Solicitudes => Set<Solicitud>();
     internal DbSet<FolioSecuencia> FolioSecuencias => Set<FolioSecuencia>();
 
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        InicializarTokensConcurrenciaNuevasSolicitudes();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        InicializarTokensConcurrenciaNuevasSolicitudes();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void InicializarTokensConcurrenciaNuevasSolicitudes()
+    {
+        foreach (var entry in ChangeTracker.Entries<Solicitud>())
+        {
+            if (entry.State != EntityState.Added)
+            {
+                continue;
+            }
+
+            var tokenProperty = entry.Property<string>("ConcurrencyToken");
+            if (string.IsNullOrWhiteSpace(tokenProperty.CurrentValue))
+            {
+                tokenProperty.CurrentValue = Guid.NewGuid().ToString("N");
+            }
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

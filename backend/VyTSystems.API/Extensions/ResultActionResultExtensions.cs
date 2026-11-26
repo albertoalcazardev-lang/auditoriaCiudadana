@@ -23,6 +23,21 @@ internal static class ResultActionResultExtensions
             ? controller.ToFailureResult(result)
             : controller.Ok(map(result.Value));
 
+    public static IActionResult ToActionResultWithETag<TSource, TResponse>(
+        this ControllerBase controller,
+        Result<TSource> result,
+        Func<TSource, TResponse> map,
+        Func<TSource, string> formatETag)
+    {
+        if (result.IsFailure)
+        {
+            return controller.ToFailureResult(result);
+        }
+
+        controller.Response.Headers.ETag = formatETag(result.Value);
+        return controller.Ok(map(result.Value));
+    }
+
     public static IActionResult ToCreatedOrOkResult<TSource, TResponse>(
         this ControllerBase controller,
         Result<TSource> result,

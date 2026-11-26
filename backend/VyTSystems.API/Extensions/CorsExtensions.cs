@@ -20,7 +20,8 @@ public static class CorsExtensions
                 {
                     policy.WithOrigins(allowedOrigins)
                         .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-                        .AllowAnyHeader();
+                        .AllowAnyHeader()
+                        .WithExposedHeaders("ETag");
                 }
             });
         });

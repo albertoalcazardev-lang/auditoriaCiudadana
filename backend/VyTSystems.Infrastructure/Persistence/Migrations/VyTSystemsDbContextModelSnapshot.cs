@@ -348,6 +348,15 @@ namespace VyTSystems.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(100)")
                         .HasColumnName("asunto");
 
+                    b.Property<string>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("char(32)")
+                        .HasColumnName("concurrency_token")
+                        .IsFixedLength()
+                        .HasAnnotation("MySQL:Collation", "utf8mb4_0900_as_cs");
+
                     b.Property<DateTime>("CreadoEnUtc")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("creado_en_utc");
@@ -458,6 +467,8 @@ namespace VyTSystems.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_solicitudes_acuse_coherente", "(tiene_acuse = 0 AND tipo_acuse = 'NoAplica') OR (tiene_acuse = 1 AND tipo_acuse <> 'NoAplica')");
 
                             t.HasCheckConstraint("CK_solicitudes_asunto_no_vacio", "CHAR_LENGTH(TRIM(asunto)) BETWEEN 1 AND 100");
+
+                            t.HasCheckConstraint("CK_solicitudes_concurrency_token_formato", "CHAR_LENGTH(concurrency_token) = 32 AND REGEXP_LIKE(concurrency_token, '^[0-9a-f]{32}$', 'c')");
 
                             t.HasCheckConstraint("CK_solicitudes_estatus_entrega", "estatus_entrega IN ('EnProceso', 'Entregada')");
 
