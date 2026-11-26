@@ -22,6 +22,16 @@ export function SessionRoute({ access, login = false }: { access: Access; login?
       {allowed ? <>
         <h1>Panel de {accessRoles[access]}</h1>
         <p>Sesión iniciada: {session.data.userName}</p>
+        {access === 'admin' && (
+          <nav aria-label="Acciones de administrador">
+            <Link
+              to="/admin/solicitudes/nueva"
+              className="inline-flex items-center rounded-lg bg-[#1D4ED8] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1E40AF]"
+            >
+              Nueva solicitud
+            </Link>
+          </nav>
+        )}
       </> : <>
         <h1>Acceso denegado</h1>
         <p>Tu sesión no tiene permiso para esta sección.</p>

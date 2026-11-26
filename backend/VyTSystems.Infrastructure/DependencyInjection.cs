@@ -46,6 +46,8 @@ public static class DependencyInjection
 
         services.AddScoped<IAuthenticationService, IdentityAuthenticationService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IAreaReceptoraReadRepository, AreaReceptoraReadRepository>();
+        services.AddScoped<ISolicitudRegistroPersistence, SolicitudRegistroPersistence>();
         services.AddScoped<DatabaseInitializer>();
 
         return services;
