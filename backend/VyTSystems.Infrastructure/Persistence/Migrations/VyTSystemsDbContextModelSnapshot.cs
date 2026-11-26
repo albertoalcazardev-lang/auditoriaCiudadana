@@ -222,6 +222,287 @@ namespace VyTSystems.Infrastructure.Persistence.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("VyTSystems.Domain.Entities.AreaReceptora", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Activa")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("activa");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("varchar(150)")
+                        .HasColumnName("nombre")
+                        .HasAnnotation("MySQL:Collation", "utf8mb4_0900_ai_ci");
+
+                    b.Property<int>("Orden")
+                        .HasColumnType("int")
+                        .HasColumnName("orden");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Nombre")
+                        .IsUnique()
+                        .HasDatabaseName("UX_areas_receptoras_nombre");
+
+                    b.HasIndex("Activa", "Orden")
+                        .HasDatabaseName("IX_areas_receptoras_activa_orden");
+
+                    b.ToTable("areas_receptoras", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_areas_receptoras_nombre_no_vacio", "CHAR_LENGTH(TRIM(nombre)) BETWEEN 1 AND 150");
+
+                            t.HasCheckConstraint("CK_areas_receptoras_orden_positivo", "orden > 0");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("01950000-0000-7000-8000-000000000001"),
+                            Activa = true,
+                            Nombre = "Dirección de Obras Públicas",
+                            Orden = 1
+                        },
+                        new
+                        {
+                            Id = new Guid("01950000-0000-7000-8000-000000000002"),
+                            Activa = true,
+                            Nombre = "Finanzas",
+                            Orden = 2
+                        },
+                        new
+                        {
+                            Id = new Guid("01950000-0000-7000-8000-000000000003"),
+                            Activa = true,
+                            Nombre = "Compras",
+                            Orden = 3
+                        },
+                        new
+                        {
+                            Id = new Guid("01950000-0000-7000-8000-000000000004"),
+                            Activa = true,
+                            Nombre = "Auditoría interna",
+                            Orden = 4
+                        },
+                        new
+                        {
+                            Id = new Guid("01950000-0000-7000-8000-000000000005"),
+                            Activa = true,
+                            Nombre = "Tecnologías de la Información",
+                            Orden = 5
+                        },
+                        new
+                        {
+                            Id = new Guid("01950000-0000-7000-8000-000000000006"),
+                            Activa = true,
+                            Nombre = "Recursos Humanos",
+                            Orden = 6
+                        },
+                        new
+                        {
+                            Id = new Guid("01950000-0000-7000-8000-000000000007"),
+                            Activa = true,
+                            Nombre = "Jurídico",
+                            Orden = 7
+                        },
+                        new
+                        {
+                            Id = new Guid("01950000-0000-7000-8000-000000000008"),
+                            Activa = true,
+                            Nombre = "Comisión Estatal del Agua",
+                            Orden = 8
+                        },
+                        new
+                        {
+                            Id = new Guid("01950000-0000-7000-8000-000000000009"),
+                            Activa = true,
+                            Nombre = "Instituto de Infraestructura Educativa",
+                            Orden = 9
+                        },
+                        new
+                        {
+                            Id = new Guid("01950000-0000-7000-8000-000000000010"),
+                            Activa = true,
+                            Nombre = "Dirección de Servicios Públicos",
+                            Orden = 10
+                        });
+                });
+
+            modelBuilder.Entity("VyTSystems.Domain.Entities.Solicitud", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AreaReceptoraId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("area_receptora_id");
+
+                    b.Property<string>("Asunto")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("asunto");
+
+                    b.Property<DateTime>("CreadoEnUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("creado_en_utc");
+
+                    b.Property<string>("CreadoPorUsuarioId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)")
+                        .HasColumnName("creado_por_usuario_id");
+
+                    b.Property<bool>("EsFolioAutomatico")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("es_folio_automatico");
+
+                    b.Property<string>("EstatusEntrega")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("estatus_entrega");
+
+                    b.Property<DateTime>("FechaEntrega")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_entrega");
+
+                    b.Property<DateTime>("FechaVencimiento")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_vencimiento");
+
+                    b.Property<string>("Folio")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("folio")
+                        .HasAnnotation("MySQL:Collation", "utf8mb4_0900_as_cs");
+
+                    b.Property<string>("FolioNormalizado")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("folio_normalizado")
+                        .HasAnnotation("MySQL:Collation", "utf8mb4_0900_ai_ci");
+
+                    b.Property<TimeSpan>("HoraEntrega")
+                        .HasColumnType("time(0)")
+                        .HasColumnName("hora_entrega");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("idempotency_key")
+                        .HasAnnotation("MySQL:Collation", "utf8mb4_0900_as_cs");
+
+                    b.Property<string>("IdempotencyPayloadHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("char(64)")
+                        .HasColumnName("idempotency_payload_hash")
+                        .IsFixedLength()
+                        .HasAnnotation("MySQL:Collation", "utf8mb4_0900_as_cs");
+
+                    b.Property<string>("MedioEntrega")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("medio_entrega");
+
+                    b.Property<bool>("TieneAcuse")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("tiene_acuse");
+
+                    b.Property<string>("TipoAcuse")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("tipo_acuse");
+
+                    b.Property<string>("TipoEvidencia")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("tipo_evidencia");
+
+                    b.Property<string>("TipoSolicitud")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("tipo_solicitud");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AreaReceptoraId")
+                        .HasDatabaseName("IX_solicitudes_area_receptora_id");
+
+                    b.HasIndex("FechaVencimiento")
+                        .HasDatabaseName("IX_solicitudes_fecha_vencimiento");
+
+                    b.HasIndex("FolioNormalizado")
+                        .IsUnique()
+                        .HasDatabaseName("UX_solicitudes_folio_normalizado");
+
+                    b.HasIndex("CreadoPorUsuarioId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("UX_solicitudes_usuario_idempotency");
+
+                    b.ToTable("solicitudes", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_solicitudes_acuse_coherente", "(tiene_acuse = 0 AND tipo_acuse = 'NoAplica') OR (tiene_acuse = 1 AND tipo_acuse <> 'NoAplica')");
+
+                            t.HasCheckConstraint("CK_solicitudes_asunto_no_vacio", "CHAR_LENGTH(TRIM(asunto)) BETWEEN 1 AND 100");
+
+                            t.HasCheckConstraint("CK_solicitudes_estatus_entrega", "estatus_entrega IN ('EnProceso', 'Entregada')");
+
+                            t.HasCheckConstraint("CK_solicitudes_fechas_coherentes", "fecha_vencimiento >= fecha_entrega");
+
+                            t.HasCheckConstraint("CK_solicitudes_folio_no_vacio", "CHAR_LENGTH(TRIM(folio)) BETWEEN 1 AND 100");
+
+                            t.HasCheckConstraint("CK_solicitudes_folio_normalizado_no_vacio", "CHAR_LENGTH(TRIM(folio_normalizado)) BETWEEN 1 AND 100");
+
+                            t.HasCheckConstraint("CK_solicitudes_idempotency_hash_longitud", "CHAR_LENGTH(idempotency_payload_hash) = 64");
+
+                            t.HasCheckConstraint("CK_solicitudes_idempotency_key_no_vacio", "CHAR_LENGTH(TRIM(idempotency_key)) BETWEEN 1 AND 100");
+
+                            t.HasCheckConstraint("CK_solicitudes_medio_entrega", "medio_entrega IN ('Digital', 'Impreso', 'PortalWeb', 'CorreoElectronico')");
+
+                            t.HasCheckConstraint("CK_solicitudes_tipo_acuse", "tipo_acuse IN ('Sello', 'Folio', 'Electronico', 'NoAplica')");
+
+                            t.HasCheckConstraint("CK_solicitudes_tipo_evidencia", "tipo_evidencia IN ('Carpeta', 'Link')");
+
+                            t.HasCheckConstraint("CK_solicitudes_tipo_solicitud", "tipo_solicitud IN ('Informacion', 'Aclaracion', 'Otro')");
+
+                            t.HasCheckConstraint("CK_solicitudes_usuario_no_vacio", "CHAR_LENGTH(TRIM(creado_por_usuario_id)) BETWEEN 1 AND 36");
+                        });
+                });
+
+            modelBuilder.Entity("VyTSystems.Infrastructure.Persistence.Entities.FolioSecuencia", b =>
+                {
+                    b.Property<int>("Anio")
+                        .HasColumnType("int")
+                        .HasColumnName("anio");
+
+                    b.Property<int>("UltimoNumero")
+                        .HasColumnType("int")
+                        .HasColumnName("ultimo_numero");
+
+                    b.HasKey("Anio");
+
+                    b.ToTable("folio_secuencias", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_folio_secuencias_anio_valido", "anio BETWEEN 1 AND 9999");
+
+                            t.HasCheckConstraint("CK_folio_secuencias_ultimo_numero_no_negativo", "ultimo_numero >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -271,6 +552,25 @@ namespace VyTSystems.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("VyTSystems.Domain.Entities.Solicitud", b =>
+                {
+                    b.HasOne("VyTSystems.Domain.Entities.AreaReceptora", "AreaReceptora")
+                        .WithMany()
+                        .HasForeignKey("AreaReceptoraId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_solicitudes_areas_receptoras_area_receptora_id");
+
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreadoPorUsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_solicitudes_asp_net_users_creado_por_usuario_id");
+
+                    b.Navigation("AreaReceptora");
                 });
 #pragma warning restore 612, 618
         }

@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using VyTSystems.Domain.Entities;
+using VyTSystems.Infrastructure.Persistence.Entities;
 
 namespace VyTSystems.Infrastructure.Persistence;
 
@@ -11,6 +13,10 @@ namespace VyTSystems.Infrastructure.Persistence;
 public sealed class VyTSystemsDbContext(DbContextOptions<VyTSystemsDbContext> options)
     : IdentityDbContext<IdentityUser, IdentityRole, string>(options)
 {
+    public DbSet<AreaReceptora> AreasReceptoras => Set<AreaReceptora>();
+    public DbSet<Solicitud> Solicitudes => Set<Solicitud>();
+    internal DbSet<FolioSecuencia> FolioSecuencias => Set<FolioSecuencia>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

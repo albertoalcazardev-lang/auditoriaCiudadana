@@ -10,6 +10,14 @@ async function refreshCsrf() {
   return csrfToken = result.requestToken;
 }
 
+export async function getCsrfToken(): Promise<string> {
+  return csrfToken ?? (await refreshCsrf());
+}
+
+export function clearCsrfToken(): void {
+  csrfToken = undefined;
+}
+
 async function readSession(signal?: AbortSignal) {
   const session = await httpRequest<Session>('/auth/me', { signal });
   if (!session?.userId || !session.userName || !Array.isArray(session.roles))
@@ -42,10 +50,10 @@ export const submitLogin: LoginAdapter = async ({ access, identifier, password, 
 export async function signOut() {
   try {
     await httpRequest<void>('/auth/logout', {
-      method: 'POST', expectedStatus: 204, headers: { 'X-CSRF-TOKEN': csrfToken ?? await refreshCsrf() },
+      method: 'POST', expectedStatus: 204, headers: { 'X-CSRF-TOKEN': await getCsrfToken() },
     });
   } finally {
     // También ante un 400: el siguiente intento solicitará un token fresco.
-    csrfToken = undefined;
+    clearCsrfToken();
   }
 }

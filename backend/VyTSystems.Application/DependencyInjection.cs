@@ -27,6 +27,7 @@ public static class DependencyInjection
 
         services.TryAddSingleton(_ => MappingConfig.CreateConfiguration(assembly));
         services.TryAddScoped<IMapper, ServiceMapper>();
+        services.TryAddSingleton(TimeProvider.System);
 
         return services;
     }
